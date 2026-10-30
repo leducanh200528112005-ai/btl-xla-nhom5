@@ -10,6 +10,9 @@
 from __future__ import annotations
 
 from app.algorithms.types import BilateralParams, ImageArray, MedianParams
+from app.catalog import validate_and_fill_params
+
+import cv2
 
 
 def denoise_median(image: ImageArray, params: MedianParams) -> ImageArray:
@@ -22,7 +25,12 @@ def denoise_median(image: ImageArray, params: MedianParams) -> ImageArray:
     Returns:
         A denoised BGR uint8 array with the same dimensions.
     """
-    raise NotImplementedError("Median denoising is not implemented.")
+
+    # raise NotImplementedError("Median denoising is not implemented.")
+    config = validate_and_fill_params("denoise_median", dict(params))
+
+    return cv2.medianBlur(image,
+                          ksize=int(config["kernel_size"]))
 
 
 def denoise_bilateral(image: ImageArray, params: BilateralParams) -> ImageArray:
@@ -35,4 +43,13 @@ def denoise_bilateral(image: ImageArray, params: BilateralParams) -> ImageArray:
     Returns:
         A denoised BGR uint8 array with the same dimensions.
     """
-    raise NotImplementedError("Bilateral denoising is not implemented.")
+    # raise NotImplementedError("Bilateral denoising is not implemented.")
+    config = validate_and_fill_params("denoise_bilateral", dict(params))
+
+    return cv2.bilateralFilter(
+        image,
+        d=int(config["diameter"]),
+        sigmaColor=float(config["sigma_color"]),
+        sigmaSpace=float(config["sigma_space"]),
+        borderType=cv2.BORDER_REFLECT_101
+    )

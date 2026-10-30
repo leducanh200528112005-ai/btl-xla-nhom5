@@ -9,6 +9,9 @@
 from __future__ import annotations
 
 from app.algorithms.types import ClaheParams, ImageArray
+from app.catalog import validate_and_fill_params
+
+import cv2
 
 
 def enhance_clahe(image: ImageArray, params: ClaheParams) -> ImageArray:
@@ -21,4 +24,21 @@ def enhance_clahe(image: ImageArray, params: ClaheParams) -> ImageArray:
     Returns:
         A contrast-enhanced BGR uint8 array with unchanged dimensions.
     """
-    raise NotImplementedError("CLAHE contrast enhancement is not implemented.")
+    # raise NotImplementedError("CLAHE contrast enhancement is not implemented.")
+
+    config = validate_and_fill_params("enhance_clahe", dict(params))
+    grid_size = int(config["tile_grid_size"])
+
+    lab = cv2.cvtColor(image, cv2.COLOR_BGR2LAB)
+    lightness, channel_a, channel_b = cv2.split(lab)
+
+    clahe = cv2.createCLAHE(
+        clipLimit=float(config["clip_limit"]),
+        tileGridSize=(grid_size, grid_size)
+    )
+
+    enhanced_lightness = clahe.apply(lightness)
+
+    enhanced_lab = cv2.merge((enhanced_lightness, channel_a, channel_b))
+
+    return cv2.cvtColor(enhanced_lab, cv2.COLOR_LAB2BGR)
