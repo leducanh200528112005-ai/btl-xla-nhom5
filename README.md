@@ -2,7 +2,7 @@
 
 Frontend trình chỉnh ảnh cũ và khung FastAPI để chia việc cho nhóm BTL Xử lý ảnh.
 
-**Hiện tại:** hạ tầng tải/xem ảnh gốc và chỉnh cấu hình được làm thật. Thuật toán, AI và xuất ảnh đã xử lý **chưa được triển khai**. Các endpoint tương ứng trả HTTP `501 NOT_IMPLEMENTED`; ứng dụng không giả lập kết quả.
+**Hiện tại:** đã ghép giảm ố vàng (Lab), tô màu (ECCV16 CPU) và upscale 2×/4× (Lanczos) với frontend: xử lý, xem kết quả, so sánh và tải PNG thật. Phần người 1/2 và AI chưa bật trong pipeline, trả `501 NOT_IMPLEMENTED`. Xem [bàn giao người 3/4](backend/IMPLEMENTATION.md).
 
 ## Giao diện
 
@@ -20,12 +20,13 @@ Các lệnh bên dưới dùng PowerShell trên Windows. Thay đường dẫn th
 
 ## 1. Chạy backend
 
-Mở terminal tại `CodeBTL/backend`:
+Mở terminal tại `backend`:
 
 ```powershell
 python -m venv .venv
 .\.venv\Scripts\python.exe -m pip install -r requirements.txt -r requirements-dev.txt
 Copy-Item .env.example .env
+.\.venv\Scripts\python.exe scripts/download_colorization.py
 .\.venv\Scripts\python.exe -m uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
 ```
 
@@ -38,7 +39,7 @@ Chỉ cần tạo virtualenv, cài dependencies và copy env ở lần đầu; k
 
 ## 2. Chạy frontend
 
-Mở terminal khác tại `CodeBTL/frontend`:
+Mở terminal khác tại `frontend`:
 
 ```powershell
 npm.cmd ci
@@ -53,9 +54,9 @@ Mở <http://localhost:3000>. Biến `NEXT_PUBLIC_API_BASE_URL` trong `.env.loca
 1. Vào `/`: đã thấy editor và vùng chọn/kéo thả ảnh.
 2. Chọn một JPG/PNG nhỏ: preview xuất hiện ngay, backend nhận ảnh và trả ID.
 3. Bật một chức năng, chỉnh tham số: ảnh gốc vẫn giữ nguyên vì chưa xử lý.
-4. Nhấn **Xử lý ảnh**: frontend gửi cấu hình thật, backend trả thông báo chưa triển khai.
+4. Bật Giảm ố vàng, Tô màu ảnh hoặc Nâng độ phân giải rồi nhấn **Xử lý ảnh**. Backend chạy các bước và trả PNG kết quả. Các công cụ còn lại vẫn trả 501 nếu được chọn.
 5. Chuyển tab **AI tư vấn**, nhập yêu cầu: backend cũng trả thông báo chưa triển khai, không có lời tư vấn mẫu.
-6. **Tải kết quả** và so sánh trước–sau chưa hoạt động vì chưa có ảnh kết quả thật.
+6. **Tải kết quả**, **So sánh** và **Kết quả** được mở sau khi xử lý thành công. Thay đổi cấu hình xóa kết quả cũ để tránh nhầm thông số.
 7. Đổi ảnh ngay trong editor: không đổi URL; cấu hình/lịch sử/kết quả của ảnh cũ được xóa.
 
 Undo hiện chỉ hoàn tác **cấu hình**, không hoàn tác phiên bản ảnh.
@@ -79,16 +80,9 @@ npm.cmd run build
 
 ## 5. Bàn giao cho thành viên làm thuật toán
 
-Đọc [hợp đồng API](docs/api-contract.md) và [đặc tả backend](docs/backend-spec.md) trước. Các module ở `backend/app/algorithms/` chứa các hàm có annotations/docstrings và `NotImplementedError`.
+Đọc [hợp đồng API](docs/api-contract.md) và [bàn giao người 3/4](backend/IMPLEMENTATION.md). Các hàm của người 1/2 được giữ nguyên; chỉ ba thuật toán đã triển khai trong đợt này được đăng ký trong pipeline.
 
-Quy ước dự kiến: ảnh NumPy `uint8`, kênh BGR; không sửa trực tiếp ảnh đầu vào. Mask vết xước do backend tự tạo, không có công cụ tô mask trên giao diện.
-
-Trình tự tích hợp về sau:
-1. Triển khai module thuật toán và tests tương ứng, giữ interface/tham số đã thống nhất hoặc thảo luận thay đổi hợp đồng trước.
-2. Hoàn thiện `pipeline.process_image(...)`, luôn bắt đầu từ bản gốc, chỉ chạy bước được bật theo thứ tự request.
-3. Hoàn thiện lưu/đọc/tải ảnh kết quả và response thành công của `/api/process` trước khi mở so sánh/download trên frontend.
-4. Tích hợp AI sau cùng: nhận ảnh, trả nhận xét và tham số có cấu trúc; kiểm tra qua cùng bộ validation với người dùng. Không thực thi mã do AI sinh ra.
-5. Khi chọn mô hình tô màu/upscale, xác nhận lại tham số và giới hạn phần cứng; catalog hiện tại là thiết kế cho phần chưa triển khai, không phải cam kết năng lực mô hình.
+Ảnh nội bộ là NumPy uint8 BGR, không sửa đầu vào. Thành viên tiếp theo cần kiểm thử thuật toán của mình, thêm vào registry pipeline và đổi status trong catalog; các tham số hiện có giữ theo hợp đồng. AI advisor vẫn là stub.
 
 ## Tài liệu triển khai
 

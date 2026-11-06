@@ -127,6 +127,7 @@ export function Editor() {
         event.key.toLowerCase() !== "z" ||
         event.shiftKey ||
         state.historyIndex <= 0 ||
+        state.processStatus === "loading" || state.adviseStatus === "loading" ||
         state.uploadStatus !== "uploaded"
       ) {
         return;
@@ -137,7 +138,7 @@ export function Editor() {
 
     window.addEventListener("keydown", handleUndoShortcut);
     return () => window.removeEventListener("keydown", handleUndoShortcut);
-  }, [state.historyIndex, state.uploadStatus]);
+  }, [state.historyIndex, state.uploadStatus, state.processStatus, state.adviseStatus]);
 
   const uploadFile = useCallback(async (file: File, generation: number) => {
     abortOperation("upload");
@@ -459,7 +460,7 @@ export function Editor() {
           state={state}
           resultUrl={resultUrl}
           uploadError={state.uploadError?.message ?? null}
-          view={view}
+          view={state.result ? view : "original"}
           onViewChange={setView}
           selectionError={selectionError}
           downloadError={downloadError}
@@ -525,7 +526,9 @@ export function Editor() {
           <span className="footer-file-status">{fileStatus}</span>
           {state.file && (
             <span className="footer-dimensions">
-              {state.uploaded
+              {state.result && view !== "original"
+                ? `${state.result.width} × ${state.result.height} px · Kết quả`
+                : state.uploaded
                 ? `${state.uploaded.width} × ${state.uploaded.height} px`
                 : state.previewWidth && state.previewHeight
                   ? `${state.previewWidth} × ${state.previewHeight} px`
@@ -533,11 +536,11 @@ export function Editor() {
             </span>
           )}
         </div>
-        <div className="footer-disclaimer"><span className="status-dot" /> Bản khung phát triển · Thuật toán chưa triển khai</div>
+        <div className="footer-disclaimer"><span className="status-dot" /> Giảm ố vàng · Tô màu · Phóng ảnh 2×/4×</div>
         <button
           type="button"
           className="footer-undo-button"
-          disabled={!canUndo || state.uploadStatus !== "uploaded"}
+          disabled={!canUndo || state.uploadStatus !== "uploaded" || busy}
           onClick={() => dispatch({ type: "UNDO_CONFIG" })}
           title="Hoàn tác thay đổi cấu hình gần nhất"
         ><Undo2 size={14} /> Hoàn tác</button>

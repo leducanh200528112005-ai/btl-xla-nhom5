@@ -1,4 +1,6 @@
-# Resim HTTP contract — v0.1
+# Resim HTTP contract — triển khai người 3/4
+
+Cập nhật 2026-11-06 theo yêu cầu triển khai giảm ố vàng, tô màu, upscale và ghép FE/BE. Giữ nguyên identifier, tham số, thứ tự bước và shape kết quả đã chốt; mở trạng thái `implemented`, phản hồi thành công, kho kết quả và lỗi mô hình như bên dưới. Người 1/2 và AI chưa được bật trong pipeline này.
 
 Nguồn chuẩn chung cho frontend/backend. JSON dùng snake_case; UI có thể chuyển đổi state nội bộ nhưng payload phải giữ các tên bên dưới. Base URL mặc định `http://127.0.0.1:8000`; tất cả route bắt đầu `/api`.
 
@@ -25,6 +27,8 @@ Nguồn chuẩn chung cho frontend/backend. JSON dùng snake_case; UI có thể 
 | 422 | VALIDATION_ERROR | Thiếu/trường lạ/tham số sai/UUID sai/danh sách bước sai |
 | 422 | IMAGE_TOO_LARGE | Vượt giới hạn số pixel |
 | 501 | NOT_IMPLEMENTED | Đầu vào hợp lệ, tính năng chỉ có khung |
+| 503 | MODEL_UNAVAILABLE | Thiếu hoặc không đọc được trọng số mô hình tô màu |
+| 503 | PROCESSING_BUSY | Tiến trình backend đang xử lý một ảnh khác, thử lại sau |
 | 500 | INTERNAL_ERROR | Lỗi hạ tầng không mong đợi, thông báo an toàn |
 
 ## 2. GET /api/health
@@ -56,12 +60,12 @@ type AlgorithmDescriptor = {
   tool_id: ToolId;
   name: string;
   description: string;
-  implementation_status: 'not_implemented';
+  implementation_status: 'not_implemented' | 'implemented';
   params: ParameterDescriptor[];
 };
 ```
 
-Tên hiển thị/description tiếng Việt. Mọi descriptor trong đợt này có status `not_implemented`; đây là catalog thiết kế cho nhóm implement, không tuyên bố mô hình đã hỗ trợ. `kind=select` dùng options và min/max/step=null. `kind=number` có min/max/step và options=[]. `integer` luôn có.
+Tên hiển thị/description tiếng Việt. `remove_yellow_cast`, `colorize_image`, `upscale_image` có status `implemented`; các thuật toán khác vẫn `not_implemented`. Status mô tả code đã được ghép vào pipeline, không thay thế kiểm tra tài nguyên runtime: tô màu strength > 0 cần trọng số cục bộ, thiếu/hỏng trả 503. `kind=select` dùng options và min/max/step=null. `kind=number` có min/max/step và options=[]. `integer` luôn có.
 
 ### Thuật toán và tham số chuẩn
 
@@ -81,7 +85,7 @@ Các cột range/step/default là giới hạn của scaffold đã thống nhấ
 
 `tile_grid_size` là số ô trên MỖI chiều của lưới vuông, không phải số pixel; implementation sau chuyển integer thành `(n,n)`. `gamma` theo quy ước `out = in^(1/gamma)`, >1 sáng hơn.
 
-Ngữ nghĩa dành cho lần implement sau (đợt này vẫn chỉ có stub):
+Ngữ nghĩa tham số:
 - `remove_yellow_cast.strength`: 0 giữ ảnh gốc, 1 dùng đầy đủ kết quả giảm ám vàng của thuật toán được chọn; khoảng giữa trộn theo mức đó.
 - `colorize_image.strength`: 0 giữ bản đầu vào, 1 dùng đầy đủ kết quả tô màu; đây là mức trộn của wrapper, không phải tham số nội bộ của mô hình.
 - `sensitivity`: càng lớn thì phát hiện vết xước càng nhạy, có nguy cơ nhận nhầm càng cao. Nhóm thuật toán phải thử nghiệm/chốt mapping sang threshold/morphology trước khi công bố chức năng hoàn tất; contract không giả định một công thức phát hiện đã tồn tại.
@@ -143,11 +147,15 @@ Ví dụ:
 
 ## 7. POST /api/process
 
-Request: `{image_id: UUID4, steps: ProcessingStep[]}`. `steps` cần ít nhất 1 phần tử. Validate schema, kiểm tra ảnh tồn tại, sau đó trả 501. Chưa gọi thuật toán hay tạo result.
+Request: `{image_id: UUID4, steps: ProcessingStep[]}`. `steps` cần ít nhất 1 phần tử. Validate schema, kiểm tra ảnh tồn tại và toàn bộ bước trước xử lý. Nếu có bước ngoài ba thuật toán đã ghép thì trả 501, không bỏ qua bước hoặc lưu kết quả một phần.
+
+200 khi tất cả bước hoàn tất và PNG kết quả đã được lưu. Luôn bắt đầu từ ảnh gốc, áp dụng EXIF orientation trên bản giải mã để khớp preview trình duyệt, giữ bytes gốc. Giữ alpha PNG, upscale alpha cùng kích thước. Giới hạn đầu ra `RESIM_MAX_RESULT_PIXELS` mặc định 32 triệu pixel, kiểm tra trước cấp phát; vượt trả 422 `IMAGE_TOO_LARGE`. Upscale là Lanczos CPU 2×/4×, không phải AI super-resolution. Giảm ám vàng dùng Lab, tô màu dùng ECCV16 CPU; strength 0 giữ đúng pixel đầu vào.
+
+Mỗi tiến trình xử lý tối đa một request tại một thời điểm, request khác trả 503 `PROCESSING_BUSY`. Thiếu/hỏng model trả 503 `MODEL_UNAVAILABLE`; lỗi không sinh kết quả thành công.
 
 Response 501: envelope NOT_IMPLEMENTED, message `Chức năng xử lý ảnh chưa được triển khai.`
 
-Shape thành công TƯƠNG LAI (chỉ types/response model, đợt này không tạo dữ liệu):
+Shape thành công (URL tương đối `/api/results/{result_id}`, PNG không mất dữ liệu):
 ```ts
 type ProcessResult = {
   result_id: string;
@@ -178,8 +186,12 @@ Shape thành công TƯƠNG LAI: `{analysis: string, steps: Array<ProcessingStep 
 
 ## 9. GET /api/download/{result_id}
 
-UUID4 hợp lệ: 501 message `Chức năng xuất ảnh kết quả chưa được triển khai.` UUID sai: 422. Chưa có result storage nên không suy diễn result từ image_id và không trả ảnh gốc thay kết quả.
+200: bytes PNG đã xử lý, `Content-Disposition: attachment` với filename từ metadata. UUID sai: 422. ID không tồn tại/hết hạn hoặc dùng ID ảnh gốc: 404 `IMAGE_NOT_FOUND`. Kết quả lưu riêng trong `.storage/results`, TTL 24 giờ từ lúc tạo; không thay thế ảnh gốc.
+
+### GET /api/results/{result_id}
+
+200: cùng bytes PNG như download, hiển thị inline để so sánh/xem kết quả. UUID sai 422, ID thiếu/hết hạn 404 `IMAGE_NOT_FOUND`. URL do `/api/process` trả; không mount thư mục storage. Cả hai endpoint có `Cache-Control: private, no-store` và `X-Content-Type-Options: nosniff`.
 
 ## 10. Đường giao tiếp duy nhất
 
-Next.js fetch trực tiếp FastAPI theo env; không thêm route `/api/*` trong Next làm proxy. Health/catalog/upload là dữ liệu thật. Process/advise/download là contract + validation + phản hồi chưa triển khai. Có thể mở FastAPI `/docs` để bàn giao cho nhóm.
+Next.js fetch trực tiếp FastAPI theo env; không thêm route `/api/*` trong Next làm proxy. Health/catalog/upload/process/results/download trả dữ liệu thật. Advise vẫn trả 501. Có thể mở FastAPI `/docs` để bàn giao cho nhóm.

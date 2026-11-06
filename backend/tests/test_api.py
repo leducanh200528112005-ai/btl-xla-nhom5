@@ -45,7 +45,10 @@ def test_health_shape_and_catalog_exact_ids_and_metadata(client):
         "upscale_image",
     ]
     assert len({item["tool_id"] for item in items}) == 8
-    assert {item["implementation_status"] for item in items} == {"not_implemented"}
+    assert {item["id"] for item in items if item["implementation_status"] == "implemented"} == {
+        "remove_yellow_cast", "colorize_image", "upscale_image",
+    }
+    assert {item["implementation_status"] for item in items[:6]} == {"not_implemented"}
     parameters = {
         item["id"]: {parameter["key"]: parameter for parameter in item["params"]}
         for item in items
@@ -377,12 +380,12 @@ def test_advise_validation_image_existence_and_501(client):
     assert error_code(missing_image) == "IMAGE_NOT_FOUND"
 
 
-def test_download_uuid_validation_and_501(client):
+def test_download_uuid_validation_and_missing_result(client):
     response = client.get(f"/api/download/{uuid4()}")
-    assert response.status_code == 501
+    assert response.status_code == 404
     assert response.json()["error"] == {
-        "code": "NOT_IMPLEMENTED",
-        "message": "Chức năng xuất ảnh kết quả chưa được triển khai.",
+        "code": "IMAGE_NOT_FOUND",
+        "message": "Không tìm thấy ảnh kết quả hoặc ảnh đã hết hạn.",
         "details": None,
     }
 
@@ -430,7 +433,8 @@ def test_openapi_exposes_501_contract_and_validation_responses(client):
     advise_responses = schema["paths"]["/api/advise"]["post"]["responses"]
     assert "501" in advise_responses
     download_responses = schema["paths"]["/api/download/{result_id}"]["get"]["responses"]
-    assert "501" in download_responses
+    assert "200" in download_responses
+    assert "404" in download_responses
     assert "422" in download_responses
 
 

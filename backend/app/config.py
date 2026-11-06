@@ -26,6 +26,8 @@ class Settings(BaseSettings):
     storage_dir: Path = Field(default_factory=lambda: _BACKEND_DIR / ".storage")
     max_upload_bytes: int = Field(default=10 * 1024 * 1024, gt=0)
     max_image_pixels: int = Field(default=20_000_000, gt=0)
+    max_result_pixels: int = Field(default=32_000_000, gt=0)
+    colorization_model_dir: Path = Field(default_factory=lambda: _BACKEND_DIR / "models" / "colorization")
     image_ttl_hours: int = Field(default=24, gt=0)
     cors_origins: list[str] = Field(
         default_factory=lambda: [
@@ -34,7 +36,7 @@ class Settings(BaseSettings):
         ]
     )
 
-    @field_validator("storage_dir", mode="before")
+    @field_validator("storage_dir", "colorization_model_dir", mode="before")
     @classmethod
     def resolve_storage_path(cls, value: str | Path) -> Path:
         path = Path(value).expanduser()

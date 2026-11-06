@@ -69,7 +69,7 @@ export function ToolsPanel({ state, dispatch, busy, onProcess }: ToolsPanelProps
             <p>Chọn tác vụ và tinh chỉnh tham số</p>
           </div>
         </div>
-        <span className="small-status-label">BẢN KHUNG PHÁT TRIỂN</span>
+        <span className="small-status-label">XỬ LÝ ẢNH TRÊN MÁY CHỦ</span>
       </div>
 
       {state.connectionStatus === "offline" && (
@@ -111,7 +111,7 @@ export function ToolsPanel({ state, dispatch, busy, onProcess }: ToolsPanelProps
                     role="switch"
                     aria-checked={enabled}
                     aria-label={`${enabled ? "Tắt" : "Bật"} ${TOOL_PRESENTATION[toolId].label}`}
-                    disabled={!canEdit}
+                    disabled={!canEdit || busy}
                     onClick={() => dispatch({ type: "SET_ENABLED", toolId, enabled: !enabled })}
                   ><span /></button>
                 </div>
@@ -123,7 +123,7 @@ export function ToolsPanel({ state, dispatch, busy, onProcess }: ToolsPanelProps
                         algorithms={algorithms}
                         state={state}
                         dispatch={dispatch}
-                        canEdit={canEdit}
+                        canEdit={canEdit && !busy}
                       />
                     ) : (
                       <p className="catalog-empty-copy">
@@ -134,7 +134,7 @@ export function ToolsPanel({ state, dispatch, busy, onProcess }: ToolsPanelProps
                     )}
                     {algorithms.length > 0 && (
                       <div className="implementation-note">
-                        <span className="implementation-dot" /> Chưa triển khai
+                        <span className="implementation-dot" /> {algorithms.some((item) => item.implementation_status === "implemented") ? "Đã triển khai" : "Chưa triển khai"}
                       </div>
                     )}
                 </div>
@@ -187,7 +187,7 @@ export function ToolsPanel({ state, dispatch, busy, onProcess }: ToolsPanelProps
             {state.processStatus === "loading" ? "Đang xử lý…" : "Xử lý ảnh"}
           </button>
         </div>
-        <p className="stub-footnote">Các thuật toán hiện chưa được triển khai.</p>
+        <p className="stub-footnote">Đã hỗ trợ giảm ố vàng, tô màu và phóng ảnh. Các công cụ khác đang được hoàn thiện.</p>
       </div>
     </div>
   );

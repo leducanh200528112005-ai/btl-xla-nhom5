@@ -3,7 +3,7 @@
 # id là ProcessingStep.algorithm; tool_id khớp ToolId trong frontend/src/types/api.ts.
 # Có 9 thuật toán nhưng 8 nhóm: Median và Bilateral cùng thuộc denoise.
 # Giá trị chuẩn nằm trong docs/api-contract.md; không đổi riêng BE hoặc FE.
-# implementation_status hiện là not_implemented; catalog không thực thi xử lý ảnh.
+# implementation_status công bố các thuật toán đã ghép; catalog không thực thi xử lý ảnh.
 
 """The single source of algorithm metadata and parameter validation."""
 
@@ -50,6 +50,7 @@ class AlgorithmSpec:
     name: str
     description: str
     params: tuple[ParameterSpec, ...]
+    implementation_status: Literal["not_implemented", "implemented"] = "not_implemented"
 
 
 def _number(
@@ -154,22 +155,25 @@ ALGORITHMS: tuple[AlgorithmSpec, ...] = (
         "remove_yellow_cast",
         "yellowing",
         "Khử ám vàng",
-        "Điều chỉnh sắc vàng cũ theo cường độ.",
-        (_number("strength", "Cường độ", "Mức điều chỉnh dự kiến.", 0.5, 0, 1, 0.05),),
+        "Giảm ám vàng toàn ảnh trong không gian Lab; giảm cường độ nếu ảnh có chủ thể màu vàng.",
+        (_number("strength", "Cường độ", "0 giữ nguyên; 1 áp dụng toàn bộ mức giảm ám vàng.", 0.5, 0, 1, 0.05),),
+        implementation_status="implemented",
     ),
     AlgorithmSpec(
         "colorize_image",
         "colorize",
         "Tô màu ảnh",
-        "Tô màu ảnh đen trắng trong phiên bản tương lai.",
-        (_number("strength", "Cường độ", "Mức ảnh hưởng dự kiến của màu.", 1, 0, 1, 0.05),),
+        "Tô màu bằng mô hình ECCV16 trên CPU. Màu là dự đoán, có thể khác màu thực tế.",
+        (_number("strength", "Cường độ", "Mức trộn kết quả tô màu với ảnh đầu vào.", 1, 0, 1, 0.05),),
+        implementation_status="implemented",
     ),
     AlgorithmSpec(
         "upscale_image",
         "upscale",
         "Phóng to ảnh",
-        "Tăng kích thước ảnh theo hệ số lựa chọn.",
+        "Phóng 2× hoặc 4× bằng nội suy Lanczos; không khôi phục chi tiết đã mất bằng AI.",
         (_select("scale", "Hệ số phóng", "Hệ số phóng ảnh.", 2, (2, 4)),),
+        implementation_status="implemented",
     ),
 )
 
@@ -225,7 +229,7 @@ def catalog_descriptors() -> list[dict[str, object]]:
             "tool_id": algorithm.tool_id,
             "name": algorithm.name,
             "description": algorithm.description,
-            "implementation_status": "not_implemented",
+            "implementation_status": algorithm.implementation_status,
             "params": [
                 {
                     "key": parameter.key,

@@ -125,7 +125,9 @@ export function Canvas({
           <div className="file-info-copy">
             <strong>{state.file?.name ?? "Chưa có ảnh"}</strong>
             <span>
-              {state.uploaded
+              {state.result && view !== "original"
+                ? `${state.result.width} × ${state.result.height} px · ${formatBytes(state.result.size_bytes)} · Kết quả`
+                : state.uploaded
                 ? `${state.uploaded.width} × ${state.uploaded.height} px · ${formatBytes(state.uploaded.size_bytes)}`
                 : state.file && state.previewWidth && state.previewHeight
                   ? `${state.previewWidth} × ${state.previewHeight} px · Ảnh xem trước`
@@ -223,7 +225,7 @@ export function Canvas({
                   />
                   <div
                     className="comparison-layer"
-                    style={{ clipPath: `inset(0 ${100 - comparePosition}% 0 0)` }}
+                    style={{ clipPath: `inset(0 0 0 ${comparePosition}%)` }}
                   >
                     <img
                       className="canvas-image"

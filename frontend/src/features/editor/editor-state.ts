@@ -119,6 +119,9 @@ function appendHistory(state: EditorState, config: EditorConfig): EditorState {
     config: cloneConfig(config),
     history: boundedHistory,
     historyIndex: boundedHistory.length - 1,
+    result: null,
+    processStatus: "idle",
+    processError: null,
   };
 }
 
@@ -225,6 +228,9 @@ export function editorReducer(state: EditorState, action: EditorAction): EditorS
         ...state,
         config: cloneConfig(state.history[historyIndex]),
         historyIndex,
+        result: null,
+        processStatus: "idle",
+        processError: null,
         draftSyncVersion: state.draftSyncVersion + 1,
       };
     }
@@ -236,7 +242,7 @@ export function editorReducer(state: EditorState, action: EditorAction): EditorS
     case "PROCESS_STARTED":
       return action.generation !== state.generation
         ? state
-        : { ...state, processStatus: "loading", processError: null };
+        : { ...state, processStatus: "loading", processError: null, result: null };
     case "PROCESS_SUCCEEDED":
       return action.generation !== state.generation
         ? state

@@ -1,4 +1,4 @@
-# FE: "Điều chỉnh độ sáng", tool_id=brightness, algorithm=adjust_gamma; người 1.
+//# FE: "Điều chỉnh độ sáng", tool_id=brightness, algorithm=adjust_gamma; người 1.
 # params.gamma: 0.1..3, bước UI 0.05, mặc định 1; số JSON, không nhận chuỗi.
 # Quy ước out = in^(1/gamma): gamma > 1 sáng hơn, không dùng quy ước ngược.
 # Input/output dự kiến BGR uint8 cùng kích thước; hiện chưa tác động lên preview FE.

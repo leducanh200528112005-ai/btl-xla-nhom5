@@ -1,23 +1,30 @@
-# FE: "Giảm ố vàng", tool_id=yellowing, algorithm=remove_yellow_cast; người 3.
-# strength: 0..1, bước UI 0.05, mặc định 0.5; 0 giữ input, 1 dùng toàn bộ
-# kết quả sửa màu, giá trị giữa là mức trộn của wrapper khi triển khai.
-# Input/output dự kiến BGR uint8 cùng kích thước; không sửa input, hiện là stub.
+"""Member 3: estimate and reduce a global yellow cast in CIE Lab."""
 
-"""Yellow-cast correction interface (intentionally unimplemented)."""
-
-from __future__ import annotations
+import cv2
+import numpy as np
 
 from app.algorithms.types import ImageArray, StrengthParams
+from app.algorithms.validation import validate_input
 
 
 def remove_yellow_cast(image: ImageArray, params: StrengthParams) -> ImageArray:
-    """Correct a yellow cast in a future implementation.
+    """Estimate warm illuminant from light, moderately neutral pixels.
 
-    Args:
-        image: BGR uint8 NumPy image array.
-        params: Catalog ``strength`` blend value from 0 to 1.
-
-    Returns:
-        A corrected BGR uint8 array; color correction is not implemented here.
+    Only positive b* is corrected, preserving luminance and the red/green axis.
+    This global white-balance estimate cannot distinguish a yellow subject from
+    aged paper; strength blends the full correction with the untouched input.
     """
-    raise NotImplementedError("Yellow-cast correction is not implemented.")
+    strength = validate_input(image, "remove_yellow_cast", params)["strength"]
+    if strength == 0:
+        return image.copy()
+    lab = cv2.cvtColor(image.astype(np.float32) / 255, cv2.COLOR_BGR2Lab)
+    lightness, a, b = cv2.split(lab)
+    candidates = (lightness >= max(15, float(np.percentile(lightness, 60)))) & (np.hypot(a, b) < 60)
+    cast = float(np.clip(np.median(b[candidates]), 0, 35)) if candidates.any() else 0
+    if cast < 0.5:
+        return image.copy()
+    # Fade near black to avoid tinting deep shadows.
+    lab[:, :, 2] -= cast * np.clip(lightness / 25, 0, 1)
+    corrected = cv2.cvtColor(lab, cv2.COLOR_Lab2BGR) * 255
+    blended = image.astype(np.float32) * (1 - strength) + corrected * strength
+    return np.rint(np.clip(blended, 0, 255)).astype(np.uint8)

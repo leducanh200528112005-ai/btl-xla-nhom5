@@ -152,7 +152,7 @@ function assertCatalog(value: unknown): asserts value is CatalogResponse {
       !VALID_TOOL_IDS.has(item.tool_id) ||
       typeof item.name !== "string" ||
       typeof item.description !== "string" ||
-      item.implementation_status !== "not_implemented" ||
+      (item.implementation_status !== "not_implemented" && item.implementation_status !== "implemented") ||
       !Array.isArray(item.params)
     ) {
       throw new ApiError("Danh mục thuật toán từ máy chủ không hợp lệ.", {
@@ -239,13 +239,21 @@ function assertProcessResult(value: unknown): asserts value is ProcessResult {
   if (
     !isRecord(value) ||
     typeof value.result_id !== "string" ||
+    !/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value.result_id) ||
     typeof value.image_id !== "string" ||
     typeof value.filename !== "string" ||
     (value.content_type !== "image/jpeg" && value.content_type !== "image/png") ||
     !isFiniteNumber(value.size_bytes) ||
+    value.size_bytes <= 0 ||
+    !Number.isInteger(value.size_bytes) ||
     !isFiniteNumber(value.width) ||
+    value.width < 1 ||
+    !Number.isInteger(value.width) ||
     !isFiniteNumber(value.height) ||
-    typeof value.url !== "string"
+    value.height < 1 ||
+    !Number.isInteger(value.height) ||
+    typeof value.url !== "string" ||
+    !value.url.startsWith("/api/results/")
   ) {
     throw new ApiError("Kết quả xử lý từ máy chủ không hợp lệ.", {
       status: null,

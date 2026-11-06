@@ -2,9 +2,9 @@
 # health()/catalog(): Editor kiểm tra kết nối và lấy metadata cho ToolsPanel.
 # upload(): FormData chỉ có file -> ImageAsset; image_id dùng cho process/advise.
 # get_original(): trả bytes gốc qua URL tương đối; FE nối URL bằng apiClient.imageUrl().
-# process(): nút "Xử lý ảnh" gửi {image_id, steps}; hợp lệ vẫn trả 501.
+# process(): chạy ba thuật toán người 3/4 và trả ProcessResult; bước khác trả 501.
 # advise(): tab "AI tư vấn" gửi {image_id, prompt, steps, current_result_id: null}.
-# download(): nút tải dùng result_id thật; hiện chưa có kết quả nên API trả 501.
+# download(): trả PNG đã xử lý qua result_id thật, không dùng image_id.
 # Khi tích hợp thật cần trả ProcessResult đúng contract trước khi FE có thể hiện
 # kết quả/so sánh/tải xuống; tuyệt đối không trả ảnh gốc như ảnh đã khôi phục.
 
@@ -26,9 +26,11 @@ from app.schemas.models import (
     ErrorResponse,
     HealthResponse,
     ProcessRequest,
+    ProcessResultResponse,
     UploadResponse,
 )
 from app.services.image_storage import ImageStorage, validate_image_bytes
+from app.services.processing import create_result
 
 router = APIRouter(prefix="/api")
 
@@ -135,21 +137,25 @@ async def get_original(image_id: UUID4, request: Request) -> FileResponse:
 
 @router.post(
     "/process",
-    status_code=501,
-    response_model=None,
+    response_model=ProcessResultResponse,
     responses={
         404: {"model": ErrorResponse, "description": "Ảnh không tồn tại hoặc đã hết hạn."},
         422: {"model": ErrorResponse, "description": "Request hoặc các bước không hợp lệ."},
         501: {"model": ErrorResponse, "description": "Xử lý ảnh chưa được triển khai."},
+        503: {"model": ErrorResponse, "description": "Thiếu mô hình hoặc máy chủ đang xử lý ảnh khác."},
     },
 )
-async def process(payload: ProcessRequest, request: Request) -> None:
-    _require_image(request, str(payload.image_id))
-    raise ApiError(
-        501,
-        "NOT_IMPLEMENTED",
-        "Chức năng xử lý ảnh chưa được triển khai.",
-    )
+def process(payload: ProcessRequest, request: Request) -> dict[str, Any]:
+    original = request.app.state.storage.get(str(payload.image_id))
+    if original is None:
+        raise ApiError(404, "IMAGE_NOT_FOUND", "Không tìm thấy ảnh hoặc ảnh đã hết hạn.")
+    lock = request.app.state.processing_lock
+    if not lock.acquire(blocking=False):
+        raise ApiError(503, "PROCESSING_BUSY", "Máy chủ đang xử lý ảnh khác. Vui lòng thử lại sau.")
+    try:
+        return create_result(original, [step.model_dump() for step in payload.steps], request.app.state.settings, request.app.state.result_storage)
+    finally:
+        lock.release()
 
 
 @router.post(
@@ -173,20 +179,33 @@ async def advise(payload: AdviseRequest, request: Request) -> None:
 
 @router.get(
     "/download/{result_id}",
-    status_code=501,
-    response_model=None,
+    response_class=FileResponse,
     responses={
         422: {"model": ErrorResponse, "description": "UUID kết quả không hợp lệ."},
-        501: {"model": ErrorResponse, "description": "Xuất ảnh kết quả chưa được triển khai."},
+        404: {"model": ErrorResponse, "description": "Kết quả không tồn tại hoặc đã hết hạn."},
     },
 )
-async def download(result_id: UUID4) -> None:
-    del result_id
-    raise ApiError(
-        501,
-        "NOT_IMPLEMENTED",
-        "Chức năng xuất ảnh kết quả chưa được triển khai.",
-    )
+def download(result_id: UUID4, request: Request) -> FileResponse:
+    result = _require_result(request, str(result_id))
+    return FileResponse(result.path, media_type=result.content_type, filename=result.filename,
+                        headers={"Cache-Control": "private, no-store", "X-Content-Type-Options": "nosniff"})
+
+
+@router.get("/results/{result_id}", response_class=FileResponse, responses={
+    404: {"model": ErrorResponse, "description": "Kết quả không tồn tại hoặc đã hết hạn."},
+    422: {"model": ErrorResponse, "description": "UUID không hợp lệ."},
+})
+def get_result(result_id: UUID4, request: Request) -> FileResponse:
+    result = _require_result(request, str(result_id))
+    return FileResponse(result.path, media_type=result.content_type,
+                        headers={"Cache-Control": "private, no-store", "X-Content-Type-Options": "nosniff"})
+
+
+def _require_result(request: Request, result_id: str):
+    result = request.app.state.result_storage.get(result_id)
+    if result is None or result.source_image_id is None:
+        raise ApiError(404, "IMAGE_NOT_FOUND", "Không tìm thấy ảnh kết quả hoặc ảnh đã hết hạn.")
+    return result
 
 
 def _require_image(request: Request, image_id: str) -> None:

@@ -1,5 +1,7 @@
 # Resim backend — đặc tả triển khai
 
+> Cập nhật 2026-11-06: theo yêu cầu mới, triển khai và ghép FE/BE cho người 3/4 (giảm ố vàng, tô màu ECCV16, upscale Lanczos), giữ người 1/2 và AI ngoài pipeline. Dùng thư mục backend/, frontend/ tại gốc repo theo xác nhận người dùng. Phần scaffold dưới đây là kế hoạch ban đầu; các yêu cầu giữ ba thuật toán/pipeline/kết quả là stub đã được thay thế bởi [hợp đồng hiện tại](api-contract.md) và [bàn giao](../backend/IMPLEMENTATION.md).
+
 Đọc `api-contract.md` trước. Task ownership: chỉ tạo/sửa `backend/**`. Backend là hạ tầng hoạt động + interface cho công việc thuật toán về sau, không phải bộ xử lý ảnh hoạt động.
 
 ## 1. Tổ chức module

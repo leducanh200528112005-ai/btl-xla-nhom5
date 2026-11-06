@@ -26,7 +26,7 @@ export type AlgorithmDescriptor = {
   tool_id: ToolId;
   name: string;
   description: string;
-  implementation_status: "not_implemented";
+  implementation_status: "not_implemented" | "implemented";
   params: ParameterDescriptor[];
 };
 

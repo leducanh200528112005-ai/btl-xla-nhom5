@@ -6,6 +6,7 @@
 
 from contextlib import asynccontextmanager
 import logging
+from threading import Lock
 from typing import AsyncIterator
 
 from fastapi import FastAPI, Request
@@ -34,20 +35,25 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     configured = settings or Settings()
     storage = ImageStorage(configured)
+    result_storage = ImageStorage(configured.model_copy(update={"storage_dir": configured.storage_dir / "results"}))
 
     @asynccontextmanager
     async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
         storage.cleanup_expired()
+        if result_storage.root.exists():
+            result_storage.cleanup_expired()
         yield
 
     app = FastAPI(
         title="Resim API",
         version="0.1.0",
-        description="Hạ tầng upload ảnh và hợp đồng cho scaffold Resim.",
+        description="Upload, xử lý và lưu kết quả ảnh Resim; AI tư vấn chưa triển khai.",
         lifespan=lifespan,
     )
     app.state.settings = configured
     app.state.storage = storage
+    app.state.result_storage = result_storage
+    app.state.processing_lock = Lock()
     app.include_router(router)
     app.add_middleware(
         UploadBodyLimitMiddleware,

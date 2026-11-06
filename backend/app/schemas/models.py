@@ -72,7 +72,7 @@ class AlgorithmDescriptorResponse(StrictModel):
     tool_id: ToolId
     name: str
     description: str
-    implementation_status: Literal["not_implemented"]
+    implementation_status: Literal["not_implemented", "implemented"]
     params: list[ParameterDescriptorResponse]
 
 
@@ -158,7 +158,7 @@ class NotImplementedResponse(StrictModel):
 
 
 class ProcessResultResponse(StrictModel):
-    """Future response shape; this scaffold intentionally never returns it."""
+    """Metadata for an encoded and persisted processing result."""
 
     result_id: UUID4
     image_id: UUID4

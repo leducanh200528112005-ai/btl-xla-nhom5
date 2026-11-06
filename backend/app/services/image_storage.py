@@ -2,7 +2,7 @@
 # UploadResponse cung cấp image_id, filename, content_type, size_bytes, width, height, url.
 # Canvas có thể xem preview local trước khi upload xong; preview không phải ID server.
 # UUID và TTL quyết định ảnh còn tồn tại cho process/advise; hết hạn trả 404.
-# Đây chỉ là kho ảnh gốc, chưa có kho ảnh kết quả cho compare/download.
+# Kho ảnh gốc và kho kết quả dùng instance/root riêng; kết quả có source_image_id.
 
 """Bounded JPEG/PNG validation and original-byte storage."""
 
@@ -56,6 +56,7 @@ class StoredImage:
     height: int
     path: Path
     created_at: datetime
+    source_image_id: str | None = None
 
 
 def validate_image_bytes(data: bytes, max_image_pixels: int) -> ValidatedImage:
@@ -139,6 +140,8 @@ class ImageStorage:
         data: bytes,
         filename: str | None,
         validated: ValidatedImage,
+        *,
+        source_image_id: str | None = None,
     ) -> StoredImage:
         """Atomically persist the original bytes and a minimal JSON sidecar."""
 
@@ -159,6 +162,8 @@ class ImageStorage:
             "created_at": now.isoformat(),
             "extension": validated.extension,
         }
+        if source_image_id is not None:
+            manifest["source_image_id"] = source_image_id
 
         image_temp: Path | None = None
         metadata_temp: Path | None = None
@@ -194,6 +199,7 @@ class ImageStorage:
             height=validated.height,
             path=image_path,
             created_at=now,
+            source_image_id=source_image_id,
         )
 
     def get(self, image_id: str) -> StoredImage | None:
@@ -229,6 +235,7 @@ class ImageStorage:
                 height=int(manifest["height"]),
                 path=image_path,
                 created_at=created_at,
+                source_image_id=manifest.get("source_image_id"),
             )
         except (OSError, ValueError, TypeError, KeyError, json.JSONDecodeError):
             return None
