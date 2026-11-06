@@ -1,4 +1,4 @@
-"""Execute member 3/4 algorithms in validated request order."""
+"""Execute all eight restoration tools in validated request order."""
 
 from collections.abc import Sequence
 from pathlib import Path
@@ -6,6 +6,11 @@ from pathlib import Path
 import numpy as np
 
 from app.algorithms.colorize import colorize_image
+from app.algorithms.denoise import denoise_median, denoise_bilateral
+from app.algorithms.brightness import adjust_gamma
+from app.algorithms.contrast import enhance_clahe
+from app.algorithms.sharpen import sharpen_unsharp
+from app.algorithms.scratches import reduce_scratches
 from app.algorithms.upscale import upscale_image
 from app.algorithms.yellowing import remove_yellow_cast
 from app.algorithms.types import ImageArray, PipelineStep
@@ -13,6 +18,12 @@ from app.catalog import ALGORITHM_BY_ID, validate_and_fill_params
 from app.errors import ApiError
 
 IMPLEMENTED_ALGORITHMS = {
+    "denoise_median": denoise_median,
+    "denoise_bilateral": denoise_bilateral,
+    "adjust_gamma": adjust_gamma,
+    "enhance_clahe": enhance_clahe,
+    "sharpen_unsharp": sharpen_unsharp,
+    "reduce_scratches": reduce_scratches,
     "remove_yellow_cast": remove_yellow_cast,
     "colorize_image": colorize_image,
     "upscale_image": upscale_image,

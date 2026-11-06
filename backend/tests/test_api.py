@@ -45,10 +45,7 @@ def test_health_shape_and_catalog_exact_ids_and_metadata(client):
         "upscale_image",
     ]
     assert len({item["tool_id"] for item in items}) == 8
-    assert {item["id"] for item in items if item["implementation_status"] == "implemented"} == {
-        "remove_yellow_cast", "colorize_image", "upscale_image",
-    }
-    assert {item["implementation_status"] for item in items[:6]} == {"not_implemented"}
+    assert {item["implementation_status"] for item in items} == {"implemented"}
     parameters = {
         item["id"]: {parameter["key"]: parameter for parameter in item["params"]}
         for item in items
@@ -248,7 +245,7 @@ def test_expired_original_is_404_and_cleaned(client, app):
     assert not (app.state.storage.root / f"{uploaded['image_id']}.jpg").exists()
 
 
-def test_process_validates_then_returns_501_without_creating_result(client, app):
+def test_process_existing_tools_returns_result_and_preserves_original(client, app):
     original = image_bytes()
     uploaded = upload(client, original).json()
     before = {path.name for path in app.state.storage.root.iterdir()}
@@ -262,15 +259,12 @@ def test_process_validates_then_returns_501_without_creating_result(client, app)
             ],
         },
     )
-    assert response.status_code == 501
-    assert response.json() == {
-        "error": {
-            "code": "NOT_IMPLEMENTED",
-            "message": "Chức năng xử lý ảnh chưa được triển khai.",
-            "details": None,
-        }
-    }
-    assert {path.name for path in app.state.storage.root.iterdir()} == before
+    assert response.status_code == 200, response.text
+    result = response.json()
+    assert (result["width"], result["height"]) == (8, 6)
+    assert client.get(result["url"]).status_code == 200
+    assert client.get(uploaded["url"]).content == original
+    assert {path.name for path in app.state.storage.root.iterdir() if path.is_file()} == before
 
 
 @pytest.mark.parametrize(

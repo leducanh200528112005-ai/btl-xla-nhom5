@@ -536,7 +536,7 @@ export function Editor() {
             </span>
           )}
         </div>
-        <div className="footer-disclaimer"><span className="status-dot" /> Giảm ố vàng · Tô màu · Phóng ảnh 2×/4×</div>
+        <div className="footer-disclaimer"><span className="status-dot" /> 8 công cụ phục hồi · Phóng ảnh 2×/4×</div>
         <button
           type="button"
           className="footer-undo-button"

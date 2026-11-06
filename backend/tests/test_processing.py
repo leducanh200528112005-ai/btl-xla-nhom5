@@ -101,6 +101,7 @@ def test_missing_and_corrupt_model_are_explicit_errors(tmp_path):
 
 def test_pipeline_rejects_unfinished_step_before_any_processing(monkeypatch):
     import app.pipeline as pipeline
+    monkeypatch.delitem(pipeline.IMPLEMENTED_ALGORITHMS, "adjust_gamma")
     monkeypatch.setitem(pipeline.IMPLEMENTED_ALGORITHMS, "remove_yellow_cast", lambda *_: pytest.fail("Should preflight first"))
     with pytest.raises(ApiError) as error:
         process_image(np.full((4, 4, 3), 120, np.uint8), [step("remove_yellow_cast"), step("adjust_gamma")])

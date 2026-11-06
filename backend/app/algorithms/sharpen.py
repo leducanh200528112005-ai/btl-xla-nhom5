@@ -1,23 +1,23 @@
-# FE: "Làm sắc nét", tool_id=sharpen, algorithm=sharpen_unsharp; người 2.
-# amount: 0..3, bước UI 0.05, mặc định 0.8; sigma: 0.1..5, bước 0.1, mặc định 1.
-# Serializer FE đặt sau colorize và trước upscale, khác vị trí hiển thị trên sidebar.
-# Input/output dự kiến BGR uint8 cùng kích thước; không sửa input, hiện là stub.
+"""Unsharp masking with floating-point arithmetic and saturating output."""
 
-"""Sharpening algorithm interfaces (intentionally unimplemented)."""
-
-from __future__ import annotations
+import cv2
+import numpy as np
 
 from app.algorithms.types import ImageArray, UnsharpParams
+from app.algorithms.validation import validate_input
 
 
 def sharpen_unsharp(image: ImageArray, params: UnsharpParams) -> ImageArray:
-    """Apply unsharp-mask sharpening in a future implementation.
+    """Return I + amount * (I - Gaussian(I, sigma)), without modifying I.
 
-    Args:
-        image: BGR uint8 NumPy image array.
-        params: Catalog ``amount`` and ``sigma`` values.
-
-    Returns:
-        A sharpened BGR uint8 array with unchanged dimensions.
+    BGR uint8 input/output have the same dimensions. amount=0 is exact identity.
+    Sharpening can amplify noise and produce halos at high amounts.
     """
-    raise NotImplementedError("Unsharp sharpening is not implemented.")
+    config = validate_input(image, "sharpen_unsharp", dict(params))
+    amount = float(config["amount"])
+    if amount == 0:
+        return image.copy()
+    source = image.astype(np.float32)
+    blurred = cv2.GaussianBlur(source, (0, 0), float(config["sigma"]),
+                               borderType=cv2.BORDER_REFLECT_101)
+    return np.clip(np.rint(source + amount * (source - blurred)), 0, 255).astype(np.uint8)
