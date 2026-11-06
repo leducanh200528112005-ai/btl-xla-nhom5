@@ -22,6 +22,20 @@ const catalog: AlgorithmDescriptor[] = [
     params: [{ key: "scale", label: "Hệ số phóng", description: "", kind: "select", default: 2, integer: true, min: null, max: null, step: null, options: [{ value: 2, label: "2" }, { value: 4, label: "4" }] }] },
 ];
 
+// The editor must send all eight groups, including either denoise method.
+for (const [id, tool_id, params] of [
+  ["denoise_median", "denoise", { kernel_size: 3 }],
+  ["denoise_bilateral", "denoise", { diameter: 5, sigma_color: 50, sigma_space: 50 }],
+  ["adjust_gamma", "brightness", { gamma: 1 }],
+  ["enhance_clahe", "contrast", { clip_limit: 2, tile_grid_size: 8 }],
+  ["sharpen_unsharp", "sharpen", { amount: 0.8, sigma: 1 }],
+  ["reduce_scratches", "scratches", { sensitivity: 0.5, inpaint_radius: 3 }],
+] as const) {
+  catalog.push({ id, tool_id, name: id, description: "", implementation_status: "implemented",
+    params: Object.entries(params).map(([key, value]) => ({ key, label: key, description: "",
+      kind: "number", default: value, integer: Number.isInteger(value), min: 0, max: 150, step: 0.05, options: [] })) });
+}
+
 let processReply: () => Promise<Response>;
 let fetchMock: ReturnType<typeof vi.fn>;
 
@@ -51,7 +65,7 @@ async function uploadAndConfigure() {
   fireEvent.change(screen.getByLabelText("Hệ số phóng"), { target: { value: "4" } });
 }
 
-describe("member 3/4 editor integration", () => {
+describe("restoration editor integration", () => {
   it("sends ordered numeric parameters, displays real result metadata, compares and downloads", async () => {
     await uploadAndConfigure();
     expect((screen.getByRole("button", { name: "So sánh" }) as HTMLButtonElement).disabled).toBe(true);
@@ -78,6 +92,26 @@ describe("member 3/4 editor integration", () => {
     fireEvent.click(screen.getByRole("switch", { name: "Tắt Tô màu ảnh" }));
     expect((screen.getByRole("button", { name: "Tải kết quả đã xử lý" }) as HTMLButtonElement).disabled).toBe(true);
     expect(screen.queryByAltText("Kết quả xử lý")).toBeNull();
+  });
+
+  it.each(["denoise_median", "denoise_bilateral"])("processes all eight tools with %s in API order", async (denoise) => {
+    await uploadAndConfigure();
+    for (const label of ["Khử nhiễu", "Điều chỉnh độ sáng", "Tăng tương phản", "Làm sắc nét", "Giảm vết xước"]) {
+      fireEvent.click(screen.getByRole("switch", { name: `Bật ${label}` }));
+    }
+    fireEvent.click(screen.getByRole("button", { name: /Khử nhiễu.*phương pháp/ }));
+    fireEvent.change(screen.getByLabelText("Phương pháp"), { target: { value: denoise } });
+    fireEvent.click(screen.getByRole("button", { name: "Xử lý ảnh" }));
+    await screen.findByText("Máy chủ đã trả về kết quả.");
+    const processCall = fetchMock.mock.calls.find(([url]) => url.endsWith("/api/process"));
+    const payload = JSON.parse(processCall![1].body);
+    expect(payload.steps.map((step: { algorithm: string }) => step.algorithm)).toEqual([
+      "reduce_scratches", denoise, "remove_yellow_cast", "adjust_gamma", "enhance_clahe", "colorize_image", "sharpen_unsharp", "upscale_image",
+    ]);
+    for (const step of payload.steps) {
+      for (const value of Object.values(step.params)) expect(typeof value).toBe("number");
+    }
+    expect((screen.getByRole("button", { name: "Tải kết quả đã xử lý" }) as HTMLButtonElement).disabled).toBe(false);
   });
 
   it("shows model failures without enabling comparison or download", async () => {

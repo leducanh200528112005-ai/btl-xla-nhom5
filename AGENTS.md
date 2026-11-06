@@ -1,7 +1,4 @@
 # Resim: implementation instructions
-
-Work only inside `CodeBTL/`. The neighbouring `CODE BTL/` is a separate directory.
-
 Before working, read `docs/implementation-plan.md`. Then read the documents for your task:
 - Frontend: `docs/frontend-spec.md` and `docs/api-contract.md`.
 - Backend: `docs/backend-spec.md` and `docs/api-contract.md`.

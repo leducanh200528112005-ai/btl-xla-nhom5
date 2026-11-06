@@ -1,5 +1,5 @@
 
-"""Scratch detection and reduction using morphological filters and inpainting."""
+"""Scratch detection and reduction using morphology and inpainting."""
 
 from __future__ import annotations
 
@@ -7,104 +7,171 @@ import cv2
 import numpy as np
 
 from app.algorithms.types import ImageArray, MaskArray, ScratchParams
+from app.algorithms.validation import validate_input
 
 
-def _validate_inputs(image: ImageArray, params: ScratchParams) -> None:
-    """Validate image and scratch parameters."""
-    if not isinstance(image, np.ndarray):
-        raise TypeError("image must be a NumPy array")
+def detect_scratches(
+    image: ImageArray,
+    params: ScratchParams,
+) -> MaskArray:
+    """Detect thin bright or dark scratches in a BGR image.
 
-    if image.dtype != np.uint8:
-        raise TypeError("image must have dtype uint8")
+    Returns:
+        A binary uint8 mask with the same height and width:
+        - 0: preserve pixel.
+        - 255: repair pixel.
 
-    if image.ndim != 3 or image.shape[2] != 3:
-        raise ValueError("image must have shape (H, W, 3)")
-
-    if image.shape[0] == 0 or image.shape[1] == 0:
-        raise ValueError("image must not be empty")
-
-    sensitivity = params["sensitivity"]
-    radius = params["inpaint_radius"]
-
-    if not np.isfinite(sensitivity) or not 0 <= sensitivity <= 1:
-        raise ValueError("sensitivity must be between 0 and 1")
-
-    if isinstance(radius, bool) or not isinstance(radius, int):
-        raise TypeError("inpaint_radius must be an integer")
-
-    if not 1 <= radius <= 10:
-        raise ValueError("inpaint_radius must be between 1 and 10")
-
-
-def _make_line_kernel(angle: int, size: int = 15) -> np.ndarray:
-    """Create a thin line-shaped morphological kernel."""
-    kernel = np.zeros((size, size), dtype=np.uint8)
-    center = size // 2
-    half = center
-
-    radians = np.deg2rad(angle)
-    dx = int(round(half * np.cos(radians)))
-    dy = int(round(half * np.sin(radians)))
-
-    cv2.line(
-        kernel,
-        (center - dx, center - dy),
-        (center + dx, center + dy),
-        1,
-        thickness=1,
+    Sensitivity ranges from 0 to 1.
+    Higher sensitivity lowers the detection threshold.
+    Sensitivity = 0 disables detection.
+    """
+    config = validate_input(
+        image,
+        "reduce_scratches",
+        dict(params),
     )
 
-    return kernel
+    sensitivity = float(config["sensitivity"])
 
+    mask = np.zeros(image.shape[:2], dtype=np.uint8)
 
-def detect_scratches(image: ImageArray, params: ScratchParams) -> MaskArray:
-    """Detect thin bright or dark scratches and return a binary mask."""
-    _validate_inputs(image, params)
+    # Disable detection for zero sensitivity or tiny images.
+    if sensitivity == 0 or min(mask.shape) < 9:
+        return mask
 
+    # Convert BGR image to grayscale.
     gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
 
-    # Bright scratches are detected by top-hat;
-    # dark scratches are detected by black-hat.
-    responses = []
+    # Extract bright and dark details using morphology.
+    kernel = cv2.getStructuringElement(
+        cv2.MORPH_ELLIPSE,
+        (7, 7),
+    )
 
-    for angle in (0, 45, 90, 135):
-        kernel = _make_line_kernel(angle)
+    bright = cv2.morphologyEx(
+        gray,
+        cv2.MORPH_TOPHAT,
+        kernel,
+    )
 
-        bright = cv2.morphologyEx(
-            gray, cv2.MORPH_TOPHAT, kernel
+    dark = cv2.morphologyEx(
+        gray,
+        cv2.MORPH_BLACKHAT,
+        kernel,
+    )
+
+    # Higher sensitivity produces a lower threshold.
+    threshold = 60.0 - 45.0 * sensitivity
+
+    length = 9
+
+    # Line-shaped kernels for four directions.
+    directions = [
+        np.ones((1, length), dtype=np.uint8),
+        np.ones((length, 1), dtype=np.uint8),
+        np.eye(length, dtype=np.uint8),
+        np.fliplr(
+            np.eye(length, dtype=np.uint8)
+        ).copy(),
+    ]
+
+    # Process bright and dark scratches separately.
+    for residual in (bright, dark):
+        candidate = np.uint8(
+            residual > threshold
+        ) * 255
+
+        lines = np.zeros_like(mask)
+
+        # Keep structures that match line-shaped kernels.
+        for direction in directions:
+            opened = cv2.morphologyEx(
+                candidate,
+                cv2.MORPH_OPEN,
+                direction,
+            )
+            lines |= opened
+
+        # Analyze connected components.
+        count, labels, stats, _ = (
+            cv2.connectedComponentsWithStats(
+                lines,
+                connectivity=8,
+            )
         )
-        dark = cv2.morphologyEx(
-            gray, cv2.MORPH_BLACKHAT, kernel
+
+        accepted = np.zeros(
+            count,
+            dtype=np.uint8,
         )
 
-        responses.append(cv2.max(bright, dark))
+        for index in range(1, count):
+            _, _, width, height, area = stats[index]
 
-    response = responses[0]
-    for item in responses[1:]:
-        response = cv2.max(response, item)
+            major = max(width, height)
+            minor = max(1, min(width, height))
 
-    # Higher sensitivity means a lower detection threshold.
-    threshold = int(round(40 - 30 * float(params["sensitivity"])))
+            # Ignore short structures.
+            if major < length:
+                continue
 
-    mask = np.where(response >= threshold, 255, 0).astype(np.uint8)
+            thickness = area / major
+            aspect_ratio = major / minor
+
+            # Accept long and relatively thin structures.
+            if (
+                thickness <= 6
+                and (
+                    aspect_ratio >= 3
+                    or thickness <= 5.5
+                )
+            ):
+                accepted[index] = 255
+
+        mask |= accepted[labels]
+
+    # Expand the mask slightly to cover scratch boundaries.
+    dilation_kernel = cv2.getStructuringElement(
+        cv2.MORPH_ELLIPSE,
+        (3, 3),
+    )
+
+    mask = cv2.dilate(
+        mask,
+        dilation_kernel,
+    )
 
     return mask
 
 
-def reduce_scratches(image: ImageArray, params: ScratchParams) -> ImageArray:
-    """Detect scratches internally and reduce them using inpainting."""
-    _validate_inputs(image, params)
+def reduce_scratches(
+    image: ImageArray,
+    params: ScratchParams,
+) -> ImageArray:
+    """Repair detected scratches using Telea inpainting.
 
-    mask = detect_scratches(image, params)
+    The input image is never modified.
+    If no scratches are detected, return an independent copy.
+    """
+    config = validate_input(
+        image,
+        "reduce_scratches",
+        dict(params),
+    )
+
+    mask = detect_scratches(
+        image,
+        config,
+    )
 
     if not np.any(mask):
         return image.copy()
 
-    restored = cv2.inpaint(
+    result = cv2.inpaint(
         image,
         mask,
-        float(params["inpaint_radius"]),
+        float(config["inpaint_radius"]),
         cv2.INPAINT_TELEA,
     )
 
-    return restored
+    return result

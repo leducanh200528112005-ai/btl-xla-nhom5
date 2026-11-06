@@ -1,5 +1,5 @@
 
-"""Sharpening algorithm using an unsharp mask."""
+"""Image sharpening using unsharp masking."""
 
 from __future__ import annotations
 
@@ -7,44 +7,68 @@ import cv2
 import numpy as np
 
 from app.algorithms.types import ImageArray, UnsharpParams
+from app.algorithms.validation import validate_input
 
 
-def sharpen_unsharp(image: ImageArray, params: UnsharpParams) -> ImageArray:
-    """Apply unsharp-mask sharpening to a BGR uint8 image."""
-    if not isinstance(image, np.ndarray):
-        raise TypeError("image must be a NumPy array")
+def sharpen_unsharp(
+    image: ImageArray,
+    params: UnsharpParams,
+) -> ImageArray:
+    """Sharpen a BGR uint8 image using the unsharp mask method.
 
-    if image.dtype != np.uint8:
-        raise TypeError("image must have dtype uint8")
+    Formula:
+        sharpened = image + amount * (image - GaussianBlur(image, sigma))
 
-    if image.ndim != 3 or image.shape[2] != 3:
-        raise ValueError("image must have shape (H, W, 3)")
+    Args:
+        image: Input BGR image with dtype uint8.
+        params: Parameters containing amount and sigma.
 
-    if image.shape[0] == 0 or image.shape[1] == 0:
-        raise ValueError("image must not be empty")
+    Returns:
+        A new sharpened image with the same shape and dtype.
 
-    amount = float(params["amount"])
-    sigma = float(params["sigma"])
+    Notes:
+        - amount ranges from 0 to 3.
+        - sigma ranges from 0.1 to 5.
+        - amount = 0 returns an unchanged copy.
+        - High sharpening amounts may amplify noise and create halos.
+    """
+    # Validate image and parameters using the shared validator.
+    config = validate_input(
+        image,
+        "sharpen_unsharp",
+        dict(params),
+    )
 
-    if not np.isfinite(amount) or not 0 <= amount <= 3:
-        raise ValueError("amount must be between 0 and 3")
+    amount = float(config["amount"])
+    sigma = float(config["sigma"])
 
-    if not np.isfinite(sigma) or not 0.1 <= sigma <= 5:
-        raise ValueError("sigma must be between 0.1 and 5")
-
+    # Return an independent copy when sharpening is disabled.
     if amount == 0:
         return image.copy()
 
-    image_float = image.astype(np.float32)
+    # Convert to floating point to avoid uint8 overflow/underflow.
+    source = image.astype(np.float32)
 
+    # Create a Gaussian-blurred version of the image.
     blurred = cv2.GaussianBlur(
-        image_float,
+        source,
         (0, 0),
         sigmaX=sigma,
         sigmaY=sigma,
+        borderType=cv2.BORDER_REFLECT_101,
     )
 
-    detail = image_float - blurred
-    sharpened = image_float + amount * detail
+    # Extract high-frequency details.
+    detail = source - blurred
 
-    return np.clip(sharpened, 0, 255).astype(np.uint8)
+    # Add details back to the original image.
+    sharpened = source + amount * detail
+
+    # Clip values to the valid uint8 range and convert back.
+    result = np.clip(
+        np.rint(sharpened),
+        0,
+        255,
+    ).astype(np.uint8)
+
+    return result

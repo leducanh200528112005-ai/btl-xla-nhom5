@@ -187,7 +187,7 @@ export function ToolsPanel({ state, dispatch, busy, onProcess }: ToolsPanelProps
             {state.processStatus === "loading" ? "Đang xử lý…" : "Xử lý ảnh"}
           </button>
         </div>
-        <p className="stub-footnote">Đã hỗ trợ giảm ố vàng, tô màu và phóng ảnh. Các công cụ khác đang được hoàn thiện.</p>
+        <p className="stub-footnote">Bật công cụ phù hợp với ảnh. Tô màu có thể thay đổi màu gốc; giảm vết xước có thể nhận nhầm chi tiết.</p>
       </div>
     </div>
   );

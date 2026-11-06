@@ -102,24 +102,27 @@ ALGORITHMS: tuple[AlgorithmSpec, ...] = (
         "Lọc trung vị",
         "Giảm nhiễu bằng phương pháp trung vị.",
         (_select("kernel_size", "Kích thước kernel", "Kích thước lân cận lọc.", 3, (3, 5, 7)),),
+        implementation_status="implemented",
     ),
     AlgorithmSpec(
         "denoise_bilateral",
         "denoise",
         "Lọc song phương",
-        "Giảm nhiễu trong khi dự kiến bảo toàn biên ảnh.",
+        "Giảm nhiễu trong khi bảo toàn biên ảnh.",
         (
             _select("diameter", "Đường kính", "Đường kính vùng lân cận.", 5, (5, 7, 9)),
             _number("sigma_color", "Sigma màu", "Mức ảnh hưởng của chênh lệch màu.", 50, 1, 150, 1),
             _number("sigma_space", "Sigma không gian", "Mức ảnh hưởng của khoảng cách không gian.", 50, 1, 150, 1),
         ),
+        implementation_status="implemented",
     ),
     AlgorithmSpec(
         "adjust_gamma",
         "brightness",
         "Hiệu chỉnh gamma",
         "Điều chỉnh độ sáng theo tham số gamma.",
-        (_number("gamma", "Gamma", "Giá trị lớn hơn 1 dự kiến làm ảnh sáng hơn.", 1, 0.1, 3, 0.05),),
+        (_number("gamma", "Gamma", "Giá trị lớn hơn 1 làm ảnh sáng hơn.", 1, 0.1, 3, 0.05),),
+        implementation_status="implemented",
     ),
     AlgorithmSpec(
         "enhance_clahe",
@@ -130,6 +133,7 @@ ALGORITHMS: tuple[AlgorithmSpec, ...] = (
             _number("clip_limit", "Giới hạn tương phản", "Giới hạn tăng tương phản cục bộ.", 2, 0.1, 10, 0.1),
             _number("tile_grid_size", "Số ô mỗi chiều", "Số ô trên mỗi chiều của lưới vuông.", 8, 2, 16, 1, integer=True),
         ),
+        implementation_status="implemented",
     ),
     AlgorithmSpec(
         "sharpen_unsharp",
@@ -137,19 +141,21 @@ ALGORITHMS: tuple[AlgorithmSpec, ...] = (
         "Làm nét unsharp",
         "Tăng độ nét theo cấu hình unsharp mask.",
         (
-            _number("amount", "Mức làm nét", "Cường độ làm nét dự kiến.", 0.8, 0, 3, 0.05),
+            _number("amount", "Mức làm nét", "Cường độ làm nét; mức cao có thể tạo viền sáng.", 0.8, 0, 3, 0.05),
             _number("sigma", "Sigma", "Độ rộng làm mờ dùng trong phương pháp.", 1, 0.1, 5, 0.1),
         ),
+        implementation_status="implemented",
     ),
     AlgorithmSpec(
         "reduce_scratches",
         "scratches",
         "Giảm vết xước",
-        "Dự kiến phát hiện và giảm vết xước trên ảnh.",
+        "Phát hiện vết xước mảnh sáng/tối và nội suy Telea; có thể nhận nhầm tóc hoặc đường nét.",
         (
-            _number("sensitivity", "Độ nhạy", "Mức nhạy dự kiến khi phát hiện vùng xước.", 0.5, 0, 1, 0.05),
-            _number("inpaint_radius", "Bán kính nội suy", "Bán kính xử lý vùng xước dự kiến.", 3, 1, 10, 1, integer=True),
+            _number("sensitivity", "Độ nhạy", "0 tắt phát hiện; tăng độ nhạy có thể nhận nhầm chi tiết.", 0.5, 0, 1, 0.05),
+            _number("inpaint_radius", "Bán kính nội suy", "Bán kính nội suy vùng xước (pixel).", 3, 1, 10, 1, integer=True),
         ),
+        implementation_status="implemented",
     ),
     AlgorithmSpec(
         "remove_yellow_cast",

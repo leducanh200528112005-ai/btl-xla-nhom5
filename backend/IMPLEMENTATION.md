@@ -1,3 +1,5 @@
+> Cập nhật mới nhất 06/11/2026: đã hoàn thiện và tích hợp cả tám nhóm công cụ (chín thuật toán). Xem [RESTORATION.md](RESTORATION.md) cho thuật toán, kiểm thử và kết quả trên ảnh người dùng. Nội dung người 3/4 dưới đây là bàn giao lịch sử; giới hạn chỉ chạy ba thuật toán đã được thay thế. AI tư vấn vẫn là stub.
+
 # Bàn giao người 3 và 4 — 2026-11-06
 
 Theo yêu cầu mới và xác nhận thư mục của người dùng, làm việc trực tiếp với backend/ và frontend/ ở gốc repo. Đã triển khai ba thuật toán và ghép luồng upload → process → xem/so sánh → download. Không sửa các module denoise, brightness, contrast, sharpen, scratches hoặc AI advisor.
