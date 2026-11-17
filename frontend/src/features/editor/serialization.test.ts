@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { AlgorithmDescriptor } from "@/types/api";
 import {
   createDefaultConfig,
+  configMatchesProposal,
   SerializationError,
   serializeSteps,
 } from "./serialization";
@@ -133,6 +134,48 @@ describe("serializeSteps", () => {
         params: { diameter: 7, sigma_color: 81 },
       },
     ]);
+  });
+
+  it("matches only effective configuration and detects edits and extra enabled tools", () => {
+    const config = createDefaultConfig(catalog);
+    config.enabled.brightness = true;
+    const proposal = {
+      analysis: "Nâng sáng",
+      steps: [{ algorithm: "adjust_gamma", params: { gamma: 1 }, reason: "Nhẹ" }],
+    };
+    config.params.denoise_median.kernel_size = 7;
+    expect(configMatchesProposal(config, catalog, proposal)).toBe(true);
+    config.params.adjust_gamma.gamma = 1.2;
+    expect(configMatchesProposal(config, catalog, proposal)).toBe(false);
+    config.params.adjust_gamma.gamma = 1;
+    expect(configMatchesProposal(config, catalog, proposal)).toBe(true);
+    config.enabled.denoise = true;
+    expect(configMatchesProposal(config, catalog, proposal)).toBe(false);
+  });
+
+  it("matches empty proposals only when all tools are off", () => {
+    const config = createDefaultConfig(catalog);
+    const proposal = { analysis: "Giữ nguyên", steps: [] };
+    expect(configMatchesProposal(config, catalog, proposal)).toBe(true);
+    config.enabled.brightness = true;
+    expect(configMatchesProposal(config, catalog, proposal)).toBe(false);
+  });
+
+  it("ignores parameter key ordering but not the selected denoise method", () => {
+    const config = createDefaultConfig(catalog);
+    config.enabled.denoise = true;
+    config.selectedAlgorithms.denoise = "denoise_bilateral";
+    const proposal = {
+      analysis: "Giảm nhiễu",
+      steps: [{
+        algorithm: "denoise_bilateral",
+        params: { sigma_color: 50, diameter: 5 },
+        reason: "Giữ biên",
+      }],
+    };
+    expect(configMatchesProposal(config, catalog, proposal)).toBe(true);
+    config.selectedAlgorithms.denoise = "denoise_median";
+    expect(configMatchesProposal(config, catalog, proposal)).toBe(false);
   });
 
   it("rejects invalid values instead of placing them in an API payload", () => {

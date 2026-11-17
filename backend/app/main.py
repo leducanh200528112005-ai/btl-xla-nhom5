@@ -47,7 +47,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app = FastAPI(
         title="Resim API",
         version="0.1.0",
-        description="Upload, xử lý và lưu kết quả ảnh Resim; AI tư vấn chưa triển khai.",
+        description="Upload, xử lý ảnh và AI tư vấn cấu hình khôi phục Resim.",
         lifespan=lifespan,
     )
     app.state.settings = configured

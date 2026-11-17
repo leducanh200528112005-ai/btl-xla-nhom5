@@ -3,7 +3,7 @@
 # upload(): FormData chỉ có file -> ImageAsset; image_id dùng cho process/advise.
 # get_original(): trả bytes gốc qua URL tương đối; FE nối URL bằng apiClient.imageUrl().
 # process(): chạy ba thuật toán người 3/4 và trả ProcessResult; bước khác trả 501.
-# advise(): tab "AI tư vấn" gửi {image_id, prompt, steps, current_result_id: null}.
+# advise(): phân tích ảnh gốc qua provider cấu hình, trả đề xuất đã validate.
 # download(): trả PNG đã xử lý qua result_id thật, không dùng image_id.
 # Khi tích hợp thật cần trả ProcessResult đúng contract trước khi FE có thể hiện
 # kết quả/so sánh/tải xuống; tuyệt đối không trả ảnh gốc như ảnh đã khôi phục.
@@ -22,6 +22,7 @@ from app.catalog import catalog_descriptors
 from app.errors import ApiError
 from app.schemas.models import (
     AdviseRequest,
+    AdviceResponse,
     CatalogResponse,
     ErrorResponse,
     HealthResponse,
@@ -31,6 +32,7 @@ from app.schemas.models import (
 )
 from app.services.image_storage import ImageStorage, validate_image_bytes
 from app.services.processing import create_result
+from app.services.ai_advisor import advise_image
 
 router = APIRouter(prefix="/api")
 
@@ -160,20 +162,30 @@ def process(payload: ProcessRequest, request: Request) -> dict[str, Any]:
 
 @router.post(
     "/advise",
-    status_code=501,
-    response_model=None,
+    response_model=AdviceResponse,
     responses={
         404: {"model": ErrorResponse, "description": "Ảnh không tồn tại hoặc đã hết hạn."},
         422: {"model": ErrorResponse, "description": "Request hoặc các bước không hợp lệ."},
-        501: {"model": ErrorResponse, "description": "AI tư vấn chưa được triển khai."},
+        502: {"model": ErrorResponse, "description": "Nhà cung cấp hoặc đề xuất AI không hợp lệ."},
+        503: {"model": ErrorResponse, "description": "AI chưa cấu hình hoặc bị giới hạn."},
+        504: {"model": ErrorResponse, "description": "AI hết thời gian chờ."},
     },
 )
-async def advise(payload: AdviseRequest, request: Request) -> None:
-    _require_image(request, str(payload.image_id))
-    raise ApiError(
-        501,
-        "NOT_IMPLEMENTED",
-        "Chức năng AI tư vấn chưa được triển khai.",
+def advise(payload: AdviseRequest, request: Request) -> dict[str, Any]:
+    original = request.app.state.storage.get(str(payload.image_id))
+    if original is None:
+        raise ApiError(404, "IMAGE_NOT_FOUND", "Không tìm thấy ảnh hoặc ảnh đã hết hạn.")
+    current_result = None
+    if payload.current_result_id is not None:
+        current_result = _require_result(request, str(payload.current_result_id))
+        if current_result.source_image_id != str(payload.image_id):
+            raise ApiError(422, "VALIDATION_ERROR", "Ảnh kết quả không thuộc ảnh gốc hiện tại.")
+        if current_result.processing_steps is None:
+            raise ApiError(422, "RESULT_CONTEXT_UNAVAILABLE", "Kết quả cũ chưa lưu cấu hình. Hãy xử lý lại ảnh trước khi tiếp tục chat.")
+    return advise_image(
+        original, payload.prompt, [step.model_dump() for step in payload.steps],
+        request.app.state.settings, current_result=current_result,
+        history=[event.model_dump() for event in payload.history],
     )
 
 

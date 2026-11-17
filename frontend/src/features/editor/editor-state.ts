@@ -4,6 +4,7 @@ import type {
   AlgorithmDescriptor,
   ImageAsset,
   ProcessResult,
+  ProcessingStep,
   ToolId,
 } from "@/types/api";
 import {
@@ -21,6 +22,18 @@ export type RequestStatus =
   | "error"
   | "not_implemented"
   | "succeeded";
+
+export type ResultSnapshot = {
+  result: ProcessResult;
+  steps: ProcessingStep[];
+  source: "manual" | "ai";
+};
+
+export type ChatEntry =
+  | { id: string; kind: "user"; text: string; status: "loading" | "succeeded" | "error"; error: string | null }
+  | { id: string; kind: "assistant"; proposal: AdviceResponse }
+  | { id: string; kind: "applied"; steps: ProcessingStep[] }
+  | ({ id: string; kind: "processed" } & ResultSnapshot);
 
 export type EditorState = {
   connectionStatus: ConnectionStatus;
@@ -46,6 +59,11 @@ export type EditorState = {
   adviseStatus: RequestStatus;
   adviseError: ApiError | null;
   proposal: AdviceResponse | null;
+  chat: ChatEntry[];
+  pendingAdviceId: string | null;
+  latestResult: ResultSnapshot | null;
+  pendingProcessing: Omit<ResultSnapshot, "result"> | null;
+  configSource: "manual" | "ai";
 };
 
 export type EditorAction =
@@ -70,11 +88,11 @@ export type EditorAction =
   | { type: "SET_PARAM"; algorithmId: string; key: string; value: number }
   | { type: "RESET_CONFIG" }
   | { type: "UNDO_CONFIG" }
-  | { type: "APPLY_CONFIG"; config: EditorConfig }
-  | { type: "PROCESS_STARTED"; generation: number }
+  | { type: "APPLY_CONFIG"; config: EditorConfig; steps: ProcessingStep[]; eventId: string }
+  | { type: "PROCESS_STARTED"; generation: number; steps: ProcessingStep[] }
   | { type: "PROCESS_SUCCEEDED"; generation: number; result: ProcessResult }
   | { type: "PROCESS_FAILED"; generation: number; error: ApiError }
-  | { type: "ADVISE_STARTED"; generation: number }
+  | { type: "ADVISE_STARTED"; generation: number; prompt: string; requestId: string }
   | { type: "ADVISE_SUCCEEDED"; generation: number; proposal: AdviceResponse }
   | { type: "ADVISE_FAILED"; generation: number; error: ApiError };
 
@@ -104,7 +122,20 @@ export const initialEditorState: EditorState = {
   adviseStatus: "idle",
   adviseError: null,
   proposal: null,
+  chat: [],
+  pendingAdviceId: null,
+  latestResult: null,
+  pendingProcessing: null,
+  configSource: "manual",
 };
+
+function copySteps(steps: ProcessingStep[]): ProcessingStep[] {
+  return steps.map((step) => ({ algorithm: step.algorithm, params: { ...step.params } }));
+}
+
+function appendChat(chat: ChatEntry[], entry: ChatEntry): ChatEntry[] {
+  return [...chat, entry].slice(-100);
+}
 
 function appendHistory(state: EditorState, config: EditorConfig): EditorState {
   if (configsEqual(config, state.config)) return state;
@@ -122,6 +153,7 @@ function appendHistory(state: EditorState, config: EditorConfig): EditorState {
     result: null,
     processStatus: "idle",
     processError: null,
+    configSource: "manual",
   };
 }
 
@@ -175,6 +207,11 @@ export function editorReducer(state: EditorState, action: EditorAction): EditorS
         adviseStatus: "idle",
         adviseError: null,
         proposal: null,
+        chat: [],
+        pendingAdviceId: null,
+        latestResult: null,
+        pendingProcessing: null,
+        configSource: "manual",
       };
     }
     case "UPLOAD_STARTED":
@@ -219,6 +256,7 @@ export function editorReducer(state: EditorState, action: EditorAction): EditorS
       return {
         ...appendHistory(state, config),
         draftSyncVersion: state.draftSyncVersion + 1,
+        configSource: "manual",
       };
     }
     case "UNDO_CONFIG": {
@@ -232,17 +270,23 @@ export function editorReducer(state: EditorState, action: EditorAction): EditorS
         processStatus: "idle",
         processError: null,
         draftSyncVersion: state.draftSyncVersion + 1,
+        configSource: "manual",
       };
     }
     case "APPLY_CONFIG":
       return {
         ...appendHistory(state, action.config),
         draftSyncVersion: state.draftSyncVersion + 1,
+        configSource: "ai",
+        chat: appendChat(state.chat, { id: action.eventId, kind: "applied", steps: copySteps(action.steps) }),
       };
     case "PROCESS_STARTED":
       return action.generation !== state.generation
         ? state
-        : { ...state, processStatus: "loading", processError: null, result: null };
+        : {
+            ...state, processStatus: "loading", processError: null, result: null,
+            pendingProcessing: { steps: copySteps(action.steps), source: state.configSource },
+          };
     case "PROCESS_SUCCEEDED":
       return action.generation !== state.generation
         ? state
@@ -251,6 +295,14 @@ export function editorReducer(state: EditorState, action: EditorAction): EditorS
             processStatus: "succeeded",
             processError: null,
             result: action.result,
+            latestResult: state.pendingProcessing
+              ? { result: action.result, ...state.pendingProcessing } : state.latestResult,
+            chat: state.pendingProcessing
+              ? appendChat(state.chat, {
+                  id: action.result.result_id, kind: "processed",
+                  result: action.result, ...state.pendingProcessing,
+                }) : state.chat,
+            pendingProcessing: null,
           };
     case "PROCESS_FAILED":
       return action.generation !== state.generation
@@ -260,11 +312,18 @@ export function editorReducer(state: EditorState, action: EditorAction): EditorS
             processStatus: requestStatus(action.error),
             processError: action.error,
             result: null,
+            pendingProcessing: null,
           };
     case "ADVISE_STARTED":
       return action.generation !== state.generation
         ? state
-        : { ...state, adviseStatus: "loading", adviseError: null };
+        : {
+            ...state, adviseStatus: "loading", adviseError: null,
+            pendingAdviceId: action.requestId,
+            chat: appendChat(state.chat, {
+              id: action.requestId, kind: "user", text: action.prompt, status: "loading", error: null,
+            }),
+          };
     case "ADVISE_SUCCEEDED":
       return action.generation !== state.generation
         ? state
@@ -273,6 +332,12 @@ export function editorReducer(state: EditorState, action: EditorAction): EditorS
             adviseStatus: "succeeded",
             adviseError: null,
             proposal: action.proposal,
+            chat: appendChat(state.chat.map((entry) =>
+              entry.kind === "user" && entry.id === state.pendingAdviceId
+                ? { ...entry, status: "succeeded" as const } : entry), {
+              id: `${state.pendingAdviceId}-reply`, kind: "assistant", proposal: action.proposal,
+            }),
+            pendingAdviceId: null,
           };
     case "ADVISE_FAILED":
       return action.generation !== state.generation
@@ -282,6 +347,10 @@ export function editorReducer(state: EditorState, action: EditorAction): EditorS
             adviseStatus: requestStatus(action.error),
             adviseError: action.error,
             proposal: null,
+            chat: state.chat.map((entry) =>
+              entry.kind === "user" && entry.id === state.pendingAdviceId
+                ? { ...entry, status: "error" as const, error: action.error.message } : entry),
+            pendingAdviceId: null,
           };
   }
 }

@@ -31,7 +31,12 @@ def _load_network(model_dir: Path):
         centers = np.load(paths[2], allow_pickle=False)
         if centers.shape != (313, 2) or not np.isfinite(centers).all():
             raise ValueError("Invalid color centers")
-        network = cv2.dnn.readNetFromCaffe(str(paths[0]), str(paths[1]))
+        # Python supports Unicode paths on Windows; OpenCV's Caffe file reader
+        # may not. Use its buffer overload rather than passing filesystem paths.
+        network = cv2.dnn.readNetFromCaffe(
+            np.frombuffer(paths[0].read_bytes(), dtype=np.uint8),
+            np.frombuffer(paths[1].read_bytes(), dtype=np.uint8),
+        )
         network.getLayer(network.getLayerId("class8_ab")).blobs = [centers.T.reshape(2, 313, 1, 1).astype(np.float32)]
         network.getLayer(network.getLayerId("conv8_313_rh")).blobs = [np.full((1, 313), 2.606, np.float32)]
         network.setPreferableBackend(cv2.dnn.DNN_BACKEND_OPENCV)

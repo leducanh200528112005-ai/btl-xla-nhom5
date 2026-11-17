@@ -36,6 +36,7 @@ def create_result(original, steps, settings, result_storage):
         f"{Path(original.filename).stem}-ket-qua.png",
         ValidatedImage("PNG", "image/png", ".png", width, height),
         source_image_id=original.image_id,
+        processing_steps=prepared,
     )
     return {
         "result_id": stored.image_id,

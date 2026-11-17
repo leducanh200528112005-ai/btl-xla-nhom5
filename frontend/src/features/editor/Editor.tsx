@@ -21,6 +21,7 @@ import {
   type ChangeEvent,
 } from "react";
 import { AdvisorPanel } from "@/features/advisor/AdvisorPanel";
+import { conversationHistory } from "@/features/advisor/conversation-context";
 import { Canvas, type CanvasView } from "@/features/editor/Canvas";
 import {
   editorReducer,
@@ -227,7 +228,7 @@ export function Editor() {
     const controller = new AbortController();
     requests.current.process = controller;
     const generation = state.generation;
-    dispatch({ type: "PROCESS_STARTED", generation });
+    dispatch({ type: "PROCESS_STARTED", generation, steps });
     setView("original");
 
     try {
@@ -275,7 +276,7 @@ export function Editor() {
     const controller = new AbortController();
     requests.current.advise = controller;
     const generation = state.generation;
-    dispatch({ type: "ADVISE_STARTED", generation });
+    dispatch({ type: "ADVISE_STARTED", generation, prompt: prompt.trim(), requestId: crypto.randomUUID() });
 
     try {
       const proposal = await apiClient.advise(
@@ -283,7 +284,8 @@ export function Editor() {
           image_id: state.uploaded.image_id,
           prompt: prompt.trim(),
           steps,
-          current_result_id: null,
+          current_result_id: state.latestResult?.result.result_id ?? null,
+          history: conversationHistory(state.chat),
         },
         controller.signal,
       );
@@ -343,7 +345,10 @@ export function Editor() {
     if (upscaleIndex !== -1 && upscaleIndex !== proposalToolOrder.length - 1) {
       return "Bước nâng độ phân giải phải đứng cuối.";
     }
-    dispatch({ type: "APPLY_CONFIG", config });
+    dispatch({
+      type: "APPLY_CONFIG", config,
+      steps: serializeSteps(config, state.catalog), eventId: crypto.randomUUID(),
+    });
     return null;
   }, [state]);
 

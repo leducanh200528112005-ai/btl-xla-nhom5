@@ -1,5 +1,14 @@
 # Resim HTTP contract — triển khai người 3/4
 
+> Cập nhật MVP AI: `/api/advise` nay trả 200 với `{analysis, steps}` thật từ
+> OpenAI/Gemini/API tương thích, thay cho 501 trong phần lịch sử bên dưới.
+> `current_result_id` nay có thể tham chiếu kết quả cùng ảnh gốc; hội thoại và
+> các lần chỉnh thủ công được gửi qua `history` (xem mục 8). Đề xuất tối đa tám bước,
+> kiểm tra catalog và thứ tự cố định của frontend; không tự xử lý.
+> Lỗi bổ sung: 503 `AI_NOT_CONFIGURED`, `AI_RATE_LIMITED`;
+> 502 `AI_PROVIDER_ERROR`, `AI_INVALID_RESPONSE`; 504 `AI_TIMEOUT`.
+> Hướng dẫn cấu hình: [AI-ADVISOR.md](../backend/AI-ADVISOR.md).
+
 Cập nhật 2026-11-06 theo yêu cầu triển khai giảm ố vàng, tô màu, upscale và ghép FE/BE. Giữ nguyên identifier, tham số, thứ tự bước và shape kết quả đã chốt; mở trạng thái `implemented`, phản hồi thành công, kho kết quả và lỗi mô hình như bên dưới. Người 1/2 và AI chưa được bật trong pipeline này.
 
 Nguồn chuẩn chung cho frontend/backend. JSON dùng snake_case; UI có thể chuyển đổi state nội bộ nhưng payload phải giữ các tên bên dưới. Base URL mặc định `http://127.0.0.1:8000`; tất cả route bắt đầu `/api`.
@@ -173,16 +182,29 @@ type ProcessResult = {
 
 Request:
 ```json
-{"image_id":"84e83523-9630-4de8-921e-daf875724d6d","prompt":"Ảnh hơi tối, tôi muốn giữ vẻ tự nhiên.","steps":[],"current_result_id":null}
+{"image_id":"84e83523-9630-4de8-921e-daf875724d6d","prompt":"Da hơi bệt, giảm khử nhiễu.","steps":[],"current_result_id":null,"history":[]}
 ```
 
 - `prompt`: trim, 1..2000 ký tự.
 - `steps`: cùng định nghĩa, 0..8 phần tử, có thể gửi cấu hình hiện tại.
-- `current_result_id`: UUID4 hoặc null, default null; đợt này chưa có result nên gửi null.
-- Validate và kiểm tra ảnh tồn tại, sau đó 501 message `Chức năng AI tư vấn chưa được triển khai.`
-- Không gọi model, không trả canned analysis/steps.
-
-Shape thành công TƯƠNG LAI: `{analysis: string, steps: Array<ProcessingStep & {reason: string}>}`. Frontend có thể chuẩn bị kiểu dữ liệu và chỗ hiển thị, nhưng chỉ render đề xuất khi response thật tồn tại.
+- `current_result_id`: UUID4 hoặc null, default null. Tham chiếu kết quả thành công
+  gần nhất kể cả do chỉnh thủ công, không nhất thiết khớp `steps` đang chọn.
+  Backend kiểm tra TTL/tồn tại (404) và liên kết với `image_id` (422 nếu khác ảnh).
+  Cấu hình tạo kết quả lấy từ metadata backend, không tin cấu hình client khai báo.
+  Kết quả legacy không có snapshot trả 422 `RESULT_CONTEXT_UNAVAILABLE`, cần xử lý lại.
+- `history`: mặc định `[]`, tối đa 20 sự kiện theo thời gian:
+  `{kind: 'user'|'assistant'|'applied'|'processed', text: string, steps: ProcessingStep[], source: 'manual'|'ai'|null}`.
+  `text` dài 1..8000, `steps` tối đa 8 và cùng validation catalog; mặc định `[]`;
+  `source` mặc định null. Không gửi base64/URL từ client hoặc ảnh mọi phiên bản.
+  Đây là ngữ cảnh không đáng tin do client cung cấp, không phải chỉ thị hệ thống.
+- Backend gửi preview ảnh gốc và preview kết quả được kiểm tra ở trên nếu có,
+  cấu hình kết quả, cấu hình hiện tại, history và catalog tới provider đã cấu hình.
+- 200: `{analysis: string, steps: Array<ProcessingStep & {reason: string}>}`.
+  Đề xuất là cấu hình thay thế đầy đủ, không tự chạy process. Có thể không có bước.
+- 503 `AI_NOT_CONFIGURED` / `AI_RATE_LIMITED`, 502 `AI_PROVIDER_ERROR` /
+  `AI_INVALID_RESPONSE`, 504 `AI_TIMEOUT`. Không trả tư vấn mẫu khi lỗi.
+- Mỗi lần `/api/process` thành công lưu snapshot `processing_steps` trong metadata
+  result. `/api/process` vẫn luôn bắt đầu từ ảnh gốc, không nhận ảnh kết quả làm đầu vào.
 
 ## 9. GET /api/download/{result_id}
 
@@ -194,4 +216,4 @@ Shape thành công TƯƠNG LAI: `{analysis: string, steps: Array<ProcessingStep 
 
 ## 10. Đường giao tiếp duy nhất
 
-Next.js fetch trực tiếp FastAPI theo env; không thêm route `/api/*` trong Next làm proxy. Health/catalog/upload/process/results/download trả dữ liệu thật. Advise vẫn trả 501. Có thể mở FastAPI `/docs` để bàn giao cho nhóm.
+Next.js fetch trực tiếp FastAPI theo env; không thêm route `/api/*` trong Next làm proxy. Health/catalog/upload/process/results/download/advise trả dữ liệu thật khi đã cấu hình. Có thể mở FastAPI `/docs` để bàn giao cho nhóm.

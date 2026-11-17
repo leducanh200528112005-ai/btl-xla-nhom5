@@ -37,15 +37,21 @@ for (const [id, tool_id, params] of [
 }
 
 let processReply: () => Promise<Response>;
+let adviceReply: () => Promise<Response>;
 let fetchMock: ReturnType<typeof vi.fn>;
 
 beforeEach(() => {
   processReply = async () => Response.json(result);
+  adviceReply = async () => Response.json({
+    analysis: "Chỉ cần giảm vàng nhẹ.",
+    steps: [{ algorithm: "remove_yellow_cast", params: { strength: 0.2 }, reason: "Giữ màu tự nhiên." }],
+  });
   vi.stubGlobal("fetch", fetchMock = vi.fn(async (url: string) => {
     if (url.endsWith("/api/health")) return Response.json({ status: "ok", app: "resim", version: "0.1.0" });
     if (url.endsWith("/api/algorithms")) return Response.json({ items: catalog });
     if (url.endsWith("/api/upload")) return Response.json(asset, { status: 201 });
     if (url.endsWith("/api/process")) return processReply();
+    if (url.endsWith("/api/advise")) return adviceReply();
     if (url.includes("/api/download/")) return new Response(new Blob(["processed png"], { type: "image/png" }));
     throw new Error(`Unexpected request: ${url}`);
   }));
@@ -66,6 +72,94 @@ async function uploadAndConfigure() {
 }
 
 describe("restoration editor integration", () => {
+  it("continues a chat with manual and AI result snapshots even after changing the draft", async () => {
+    await uploadAndConfigure();
+    fireEvent.click(screen.getByRole("button", { name: "Xử lý ảnh" }));
+    await screen.findByText("Máy chủ đã trả về kết quả.");
+    fireEvent.click(screen.getByRole("switch", { name: "Tắt Tô màu ảnh" }));
+    fireEvent.click(screen.getByRole("tab", { name: /AI tư vấn/ }));
+    await screen.findByText("Bạn đã tự điều chỉnh và xử lý ảnh");
+    fireEvent.change(screen.getByLabelText("Bạn muốn cải thiện điều gì?"), { target: { value: "Màu chưa tự nhiên" } });
+    fireEvent.click(screen.getByRole("button", { name: "Gửi yêu cầu" }));
+    await screen.findByText("Chỉ cần giảm vàng nhẹ.");
+    let calls = fetchMock.mock.calls.filter(([url]) => url.endsWith("/api/advise"));
+    const first = JSON.parse(calls[0][1].body);
+    expect(first.current_result_id).toBe(resultId);
+    expect(first.steps.some((step: { algorithm: string }) => step.algorithm === "colorize_image")).toBe(false);
+    expect(first.history[0]).toMatchObject({
+      kind: "processed", source: "manual", steps: [
+        { algorithm: "remove_yellow_cast", params: { strength: 0.5 } },
+        { algorithm: "colorize_image", params: { strength: 1 } },
+        { algorithm: "upscale_image", params: { scale: 4 } },
+      ],
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Áp dụng cấu hình" }));
+    fireEvent.click(screen.getByRole("tab", { name: /Công cụ/ }));
+    const secondResultId = "a4e83523-9630-4de8-921e-daf875724d6d";
+    processReply = async () => Response.json({ ...result, result_id: secondResultId, url: `/api/results/${secondResultId}` });
+    fireEvent.click(screen.getByRole("button", { name: "Xử lý ảnh" }));
+    await screen.findByText("Máy chủ đã trả về kết quả.");
+    fireEvent.click(screen.getByRole("tab", { name: /AI tư vấn/ }));
+    await screen.findByText("Đã xử lý theo đề xuất AI");
+    expect(screen.getAllByAltText("Phiên bản đã xử lý photo-ket-qua.png")).toHaveLength(2);
+    fireEvent.change(screen.getByLabelText("Bạn muốn cải thiện điều gì?"), { target: { value: "Giảm thêm một chút" } });
+    fireEvent.click(screen.getByRole("button", { name: "Gửi yêu cầu" }));
+    await screen.findByText("Giảm thêm một chút");
+    await waitFor(() => expect(screen.getAllByText("Chỉ cần giảm vàng nhẹ.")).toHaveLength(2));
+    calls = fetchMock.mock.calls.filter(([url]) => url.endsWith("/api/advise"));
+    const followup = JSON.parse(calls[1][1].body);
+    expect(followup.current_result_id).toBe(secondResultId);
+    expect(followup.history.map((event: { kind: string }) => event.kind)).toEqual([
+      "processed", "user", "assistant", "applied", "processed",
+    ]);
+    expect(followup.history.at(-1)).toMatchObject({
+      source: "ai", steps: [{ algorithm: "remove_yellow_cast", params: { strength: 0.2 } }],
+    });
+    fireEvent.change(screen.getByLabelText("Chọn một ảnh JPG hoặc PNG"), { target: { files: [new File(["new"], "new.png", { type: "image/png" })] } });
+    await screen.findByAltText("Ảnh gốc new.png");
+    expect(screen.queryByText("Màu chưa tự nhiên")).toBeNull();
+    expect(screen.queryByText("Chỉ cần giảm vàng nhẹ.")).toBeNull();
+  }, 15000);
+
+  it("applies real advice as configuration without automatically processing", async () => {
+    await uploadAndConfigure();
+    fireEvent.click(screen.getByRole("tab", { name: /AI tư vấn/ }));
+    fireEvent.change(screen.getByLabelText("Bạn muốn cải thiện điều gì?"), { target: { value: "Giữ tự nhiên" } });
+    fireEvent.click(screen.getByRole("button", { name: "Gửi yêu cầu" }));
+    await screen.findByText("Chỉ cần giảm vàng nhẹ.");
+    expect(screen.getByText("strength: 0.2")).toBeTruthy();
+    const adviceCall = fetchMock.mock.calls.find(([url]) => url.endsWith("/api/advise"));
+    expect(JSON.parse(adviceCall![1].body)).toMatchObject({
+      image_id: imageId, prompt: "Giữ tự nhiên", current_result_id: null,
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Áp dụng cấu hình" }));
+    expect((screen.getByRole("button", { name: "Đã khớp đề xuất" }) as HTMLButtonElement).disabled).toBe(true);
+    fireEvent.click(screen.getByRole("button", { name: "Hoàn tác" }));
+    expect((screen.getByRole("button", { name: "Áp dụng cấu hình" }) as HTMLButtonElement).disabled).toBe(false);
+    fireEvent.click(screen.getByRole("button", { name: "Áp dụng cấu hình" }));
+    expect((screen.getByRole("button", { name: "Đã khớp đề xuất" }) as HTMLButtonElement).disabled).toBe(true);
+    expect(fetchMock.mock.calls.some(([url]) => url.endsWith("/api/process"))).toBe(false);
+    fireEvent.click(screen.getByRole("tab", { name: /Công cụ/ }));
+    fireEvent.click(screen.getByRole("button", { name: "Xử lý ảnh" }));
+    await screen.findByText("Máy chủ đã trả về kết quả.");
+    const call = fetchMock.mock.calls.find(([url]) => url.endsWith("/api/process"));
+    expect(JSON.parse(call![1].body).steps).toEqual([
+      { algorithm: "remove_yellow_cast", params: { strength: 0.2 } },
+    ]);
+  });
+
+  it("displays AI failure without fabricating a proposal", async () => {
+    adviceReply = async () => Response.json({
+      error: { code: "AI_NOT_CONFIGURED", message: "Chưa cấu hình AI.", details: null },
+    }, { status: 503 });
+    await uploadAndConfigure();
+    fireEvent.click(screen.getByRole("tab", { name: /AI tư vấn/ }));
+    fireEvent.change(screen.getByLabelText("Bạn muốn cải thiện điều gì?"), { target: { value: "Giữ tự nhiên" } });
+    fireEvent.click(screen.getByRole("button", { name: "Gửi yêu cầu" }));
+    await screen.findByText("Chưa cấu hình AI.");
+    expect(screen.queryByRole("button", { name: "Áp dụng cấu hình" })).toBeNull();
+  });
+
   it("sends ordered numeric parameters, displays real result metadata, compares and downloads", async () => {
     await uploadAndConfigure();
     expect((screen.getByRole("button", { name: "So sánh" }) as HTMLButtonElement).disabled).toBe(true);

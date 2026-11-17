@@ -131,11 +131,24 @@ class ProcessRequest(StrictModel):
         return _validate_steps(steps)
 
 
+class ConversationEvent(StrictModel):
+    kind: Literal["user", "assistant", "applied", "processed"]
+    text: Annotated[StrictStr, Field(min_length=1, max_length=8000)]
+    steps: Annotated[list[ProcessingStep], Field(max_length=8)] = Field(default_factory=list)
+    source: Literal["manual", "ai"] | None = None
+
+    @field_validator("steps")
+    @classmethod
+    def validate_event_steps(cls, steps: list[ProcessingStep]) -> list[ProcessingStep]:
+        return _validate_steps(steps)
+
+
 class AdviseRequest(StrictModel):
     image_id: UUID4
     prompt: StrictStr
     steps: Annotated[list[ProcessingStep], Field(max_length=8)]
     current_result_id: UUID4 | None = None
+    history: Annotated[list[ConversationEvent], Field(max_length=20)] = Field(default_factory=list)
 
     @field_validator("prompt")
     @classmethod
@@ -155,6 +168,21 @@ class AdviseRequest(StrictModel):
 
 class NotImplementedResponse(StrictModel):
     error: ErrorInfo
+
+
+class AdvisedStep(ProcessingStep):
+    reason: Annotated[StrictStr, Field(min_length=1, max_length=2000)]
+
+
+class AdviceResponse(StrictModel):
+    analysis: Annotated[StrictStr, Field(min_length=1, max_length=8000)]
+    steps: Annotated[list[AdvisedStep], Field(max_length=8)]
+
+    @field_validator("steps")
+    @classmethod
+    def validate_proposal(cls, steps: list[AdvisedStep]) -> list[AdvisedStep]:
+        _validate_steps(steps)
+        return steps
 
 
 class ProcessResultResponse(StrictModel):

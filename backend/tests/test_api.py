@@ -339,7 +339,9 @@ def test_step_schema_fills_defaults_trims_prompt_and_preserves_order():
     assert advise.prompt == "keep it natural"
 
 
-def test_advise_validation_image_existence_and_501(client):
+def test_advise_validation_image_existence_and_configuration(client, monkeypatch):
+    # Do not contact a paid provider when the developer has configured .env.
+    monkeypatch.setattr(client.app.state.settings, "ai_model", "")
     valid = upload(client, image_bytes()).json()
     request = {
         "image_id": valid["image_id"],
@@ -348,9 +350,8 @@ def test_advise_validation_image_existence_and_501(client):
         "current_result_id": None,
     }
     response = client.post("/api/advise", json=request)
-    assert response.status_code == 501
-    assert response.json()["error"]["code"] == "NOT_IMPLEMENTED"
-    assert response.json()["error"]["message"] == "Chức năng AI tư vấn chưa được triển khai."
+    assert response.status_code == 503
+    assert response.json()["error"]["code"] == "AI_NOT_CONFIGURED"
 
     for prompt in ("  \t", "x" * 2001):
         invalid = client.post("/api/advise", json={**request, "prompt": prompt})
@@ -425,7 +426,8 @@ def test_openapi_exposes_501_contract_and_validation_responses(client):
     assert "501" in process_responses
     assert "404" in process_responses
     advise_responses = schema["paths"]["/api/advise"]["post"]["responses"]
-    assert "501" in advise_responses
+    assert "200" in advise_responses
+    assert "503" in advise_responses
     download_responses = schema["paths"]["/api/download/{result_id}"]["get"]["responses"]
     assert "200" in download_responses
     assert "404" in download_responses

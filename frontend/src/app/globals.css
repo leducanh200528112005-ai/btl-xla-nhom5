@@ -1637,14 +1637,20 @@ select:disabled {
 .apply-proposal {
   width: 100%;
   margin-top: 13px;
+}
+
+.apply-proposal.is-matched:disabled {
   color: #b8d9d1;
   border-color: #3a514b;
   background: #1a2925;
+  cursor: default;
 }
 
-.apply-proposal:hover {
-  border-color: #4d786d;
-  background: #203630;
+.proposal-match-status {
+  margin: 8px 0 0;
+  color: var(--muted-strong);
+  font-size: 11px;
+  line-height: 1.5;
 }
 
 .advisor-actions {
@@ -1655,6 +1661,86 @@ select:disabled {
   width: 100%;
   min-height: 36px;
 }
+
+.chat-timeline {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  overflow-wrap: anywhere;
+}
+
+.chat-entry {
+  min-width: 0;
+  flex-shrink: 0;
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.chat-speaker {
+  display: block;
+  margin-bottom: 5px;
+  color: var(--muted-strong);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.chat-entry-user {
+  margin-left: 24px;
+  padding: 10px 12px;
+  border: 1px solid #36544d;
+  border-radius: 10px 10px 2px 10px;
+  background: #1a302b;
+}
+
+.chat-user-text,
+.proposal-analysis {
+  white-space: pre-wrap;
+}
+
+.chat-user-text { margin: 0; }
+.chat-entry .proposal-card { margin-top: 0; }
+
+.chat-entry-applied,
+.chat-entry-processed {
+  padding: 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: #1b2326;
+}
+
+.chat-event-label {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  margin: 0 0 6px;
+  color: #b8d9d1;
+}
+
+.chat-config-summary {
+  padding-left: 16px;
+  margin: 8px 0;
+}
+
+.chat-config-summary span {
+  display: block;
+  color: var(--muted-strong);
+}
+
+.chat-result p { margin: 5px 0; }
+.chat-result img {
+  display: block;
+  width: 100%;
+  max-height: 180px;
+  margin: 8px 0;
+  object-fit: contain;
+  border-radius: 5px;
+}
+
+.chat-entry summary { cursor: pointer; color: var(--muted-strong); }
+.chat-composer { display: block; }
+.chat-composer .advisor-prompt-label { margin-top: 8px; }
+.chat-composer .advisor-prompt { min-height: 72px; max-height: 140px; width: 100%; }
+.chat-composer .advisor-submit { margin-top: 8px; }
 
 .app-footer {
   position: relative;
@@ -1798,6 +1884,10 @@ select:disabled {
   .tools-panel,
   .advisor-panel {
     min-height: 550px;
+  }
+
+  .chat-panel {
+    height: 650px;
   }
 
   .app-footer {

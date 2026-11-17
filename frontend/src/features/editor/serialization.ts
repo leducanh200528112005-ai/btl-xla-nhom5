@@ -1,4 +1,5 @@
 import type {
+  AdviceResponse,
   AlgorithmDescriptor,
   ProcessingStep,
   ToolId,
@@ -103,6 +104,25 @@ export function cloneConfig(config: EditorConfig): EditorConfig {
 
 export function configsEqual(left: EditorConfig, right: EditorConfig): boolean {
   return JSON.stringify(left) === JSON.stringify(right);
+}
+
+/** Compare effective processing steps, not inactive parameter drafts or reasons. */
+export function configMatchesProposal(
+  config: EditorConfig,
+  catalog: AlgorithmDescriptor[],
+  proposal: AdviceResponse,
+): boolean {
+  try {
+    const current = serializeSteps(config, catalog);
+    return current.length === proposal.steps.length && current.every((step, index) => {
+      const proposed = proposal.steps[index];
+      return step.algorithm === proposed.algorithm &&
+        Object.keys(step.params).length === Object.keys(proposed.params).length &&
+        Object.entries(step.params).every(([key, value]) => proposed.params[key] === value);
+    });
+  } catch {
+    return false;
+  }
 }
 
 export function serializeSteps(

@@ -57,6 +57,7 @@ class StoredImage:
     path: Path
     created_at: datetime
     source_image_id: str | None = None
+    processing_steps: list[dict] | None = None
 
 
 def validate_image_bytes(data: bytes, max_image_pixels: int) -> ValidatedImage:
@@ -142,6 +143,7 @@ class ImageStorage:
         validated: ValidatedImage,
         *,
         source_image_id: str | None = None,
+        processing_steps: list[dict] | None = None,
     ) -> StoredImage:
         """Atomically persist the original bytes and a minimal JSON sidecar."""
 
@@ -164,6 +166,8 @@ class ImageStorage:
         }
         if source_image_id is not None:
             manifest["source_image_id"] = source_image_id
+        if processing_steps is not None:
+            manifest["processing_steps"] = processing_steps
 
         image_temp: Path | None = None
         metadata_temp: Path | None = None
@@ -200,6 +204,7 @@ class ImageStorage:
             path=image_path,
             created_at=now,
             source_image_id=source_image_id,
+            processing_steps=processing_steps,
         )
 
     def get(self, image_id: str) -> StoredImage | None:
@@ -236,6 +241,7 @@ class ImageStorage:
                 path=image_path,
                 created_at=created_at,
                 source_image_id=manifest.get("source_image_id"),
+                processing_steps=manifest.get("processing_steps"),
             )
         except (OSError, ValueError, TypeError, KeyError, json.JSONDecodeError):
             return None

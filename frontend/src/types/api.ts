@@ -76,6 +76,14 @@ export type AdviceRequest = {
   prompt: string;
   steps: ProcessingStep[];
   current_result_id: string | null;
+  history?: ConversationEvent[];
+};
+
+export type ConversationEvent = {
+  kind: "user" | "assistant" | "applied" | "processed";
+  text: string;
+  steps: ProcessingStep[];
+  source?: "manual" | "ai" | null;
 };
 
 export type AdviceStep = ProcessingStep & { reason: string };

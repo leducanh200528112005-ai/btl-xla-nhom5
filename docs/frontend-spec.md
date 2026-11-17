@@ -103,6 +103,14 @@ Footer sidebar luôn nhìn thấy, không bị cuộn mất: `Đặt lại` và 
 
 ## 7. Tab AI tư vấn
 
+> Cập nhật hội thoại: thay form một lượt bằng timeline theo từng ảnh. Lưu tối đa
+> 100 sự kiện trong bộ nhớ phiên; gửi 20 sự kiện hoàn tất gần nhất, ảnh gốc và ID
+> kết quả gần nhất. Mỗi lần xử lý thành công (kể cả chỉnh tay) lưu ảnh/cấu hình
+> cố định, độc lập slider và result hiện hành. Phân biệt đã đề xuất/áp dụng/xử lý.
+> Mỗi đề xuất có nút khớp cấu hình; lỗi ở lượt user có thử gửi lại. Đổi ảnh xóa
+> timeline/snapshot và bỏ response cũ. Không có lưu phiên qua reload/database.
+> Những mô tả single-turn/501 dưới đây là lịch sử, được thay thế bởi cập nhật này.
+
 - Bảng tư vấn có cấu trúc, không làm chatbot giả.
 - Gợi ý chữ tĩnh giải thích AI sẽ nhận xét ảnh và đề xuất thông số; không trình bày gợi ý đó như câu trả lời của AI.
 - Textarea request, counter max 2000, nút `Phân tích ảnh` cần uploaded ID và prompt không rỗng. Gửi steps hiện tại, current_result_id=null.

@@ -6,8 +6,9 @@
 """Runtime settings for the Resim API."""
 
 from pathlib import Path
+from typing import Literal
 
-from pydantic import Field, field_validator
+from pydantic import Field, SecretStr, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 _BACKEND_DIR = Path(__file__).resolve().parents[1]
@@ -29,6 +30,13 @@ class Settings(BaseSettings):
     max_result_pixels: int = Field(default=32_000_000, gt=0)
     colorization_model_dir: Path = Field(default_factory=lambda: _BACKEND_DIR / "models" / "colorization")
     image_ttl_hours: int = Field(default=24, gt=0)
+    ai_provider: Literal["openai", "gemini", "openai_compatible"] = "openai"
+    ai_api_key: SecretStr = SecretStr("")
+    ai_model: str = ""
+    ai_base_url: str = ""
+    ai_timeout_seconds: float = Field(default=60, gt=0, le=180)
+    ai_preview_max_edge: int = Field(default=1024, ge=256, le=2048)
+    ai_debug_log: bool = True
     cors_origins: list[str] = Field(
         default_factory=lambda: [
             "http://localhost:3000",

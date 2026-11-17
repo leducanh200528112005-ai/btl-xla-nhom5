@@ -1,5 +1,12 @@
 # Resim
 
+**AI tư vấn MVP:** đã có adapter OpenAI, Gemini và API tương thích OpenAI,
+cấu hình một provider ở backend. Xem [hướng dẫn AI](backend/AI-ADVISOR.md).
+Tab AI nay là hội thoại theo từng ảnh, ghi cả chỉnh thủ công và kết quả xử lý.
+Mỗi lượt AI nhận ảnh gốc, kết quả gần nhất và lịch sử gần đây; lịch sử chỉ giữ
+trong phiên, đổi ảnh/reload sẽ bắt đầu lại.
+Các ghi chú AI stub/501 bên dưới là trạng thái lịch sử, được thay thế bởi MVP.
+
 Frontend trình chỉnh ảnh cũ và khung FastAPI để chia việc cho nhóm BTL Xử lý ảnh.
 
 **Hiện tại:** đã ghép giảm ố vàng (Lab), tô màu (ECCV16 CPU) và upscale 2×/4× (Lanczos) với frontend: xử lý, xem kết quả, so sánh và tải PNG thật. Phần người 1/2 và AI chưa bật trong pipeline, trả `501 NOT_IMPLEMENTED`. Xem [bàn giao người 3/4](backend/IMPLEMENTATION.md).
