@@ -34,10 +34,16 @@ python -m venv .venv
 .\.venv\Scripts\python.exe -m pip install -r requirements.txt -r requirements-dev.txt
 Copy-Item .env.example .env
 .\.venv\Scripts\python.exe scripts/download_colorization.py
-.\.venv\Scripts\python.exe -m uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
+.\.venv\Scripts\python.exe -m uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 ```
 
 Chỉ cần tạo virtualenv, cài dependencies và copy env ở lần đầu; không ghi đè `.env` bạn đã sửa.
+
+`--host 0.0.0.0` cho phép thiết bị khác trong LAN gọi backend (ví dụ `http://10.155.201.172:8000`). Khi đó phải thêm origin frontend tương ứng vào `RESIM_CORS_ORIGINS` và mở cổng 8000 trên Windows Firewall (PowerShell quản trị viên):
+
+```powershell
+New-NetFirewallRule -DisplayName "Resim API 8000" -Direction Inbound -Protocol TCP -LocalPort 8000 -Action Allow
+```
 
 - Health: <http://127.0.0.1:8000/api/health>
 - Tài liệu API: <http://127.0.0.1:8000/docs>
