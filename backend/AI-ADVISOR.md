@@ -21,10 +21,28 @@ Chọn model có hỗ trợ ảnh và JSON tại nhà cung cấp; không phải 
 API tương thích đều hỗ trợ. Khởi động lại backend sau khi đổi cấu hình.
 Không đặt key trong frontend hoặc commit `.env`.
 
+## Phạm vi phản hồi
+
+Mỗi lượt `/api/advise` trả đúng một `decision`:
+
+- `advise`: yêu cầu chỉnh sửa/khôi phục ảnh đang mở và catalog có công cụ phù hợp.
+  `steps` là cấu hình thay thế đầy đủ; có thể rỗng nếu không cần bật công cụ.
+- `answer`: người dùng chỉ hỏi/mô tả/đánh giá ảnh đang mở, không yêu cầu chỉnh sửa.
+  Backend giữ câu trả lời nhưng ép `steps: []`; không có nút áp dụng.
+- `unsupported`: người dùng muốn chỉnh sửa ảnh nhưng catalog không có công cụ
+  (ví dụ xóa vật thể, đổi nền). Backend giữ giải thích nhưng ép `steps: []`.
+- `off_topic`: yêu cầu không liên quan đến ảnh đang mở (toán, kiến thức chung,
+  lập trình, dịch, thời tiết, ảnh khác). Backend **bỏ toàn bộ** `analysis`/`steps`
+  của model và trả một câu cố định; không lặp lại câu hỏi, không trả đáp án.
+
+Prompt chỉ gồm số và toán tử (ví dụ `1 + 1 = ?`) bị chặn tại server, không gọi
+provider. Câu hỏi hỗn hợp vừa chỉnh sửa vừa hỏi việc khác chỉ xử lý phần ảnh.
+
 Upload ảnh → AI tư vấn → nhập mục tiêu → Phân tích ảnh → xem nhận xét,
 tham số/lý do → Áp dụng cấu hình → tự nhấn Xử lý ảnh.
 Áp dụng thay thế các nhóm đang bật và tạo một bước undo; không tự xử lý.
-Đề xuất rỗng hợp lệ có nghĩa không bật công cụ nào.
+Đề xuất rỗng hợp lệ có nghĩa không bật công cụ nào; frontend không cho áp dụng
+khi không có bước nào.
 
 Backend đọc ảnh gốc bằng ID, áp dụng EXIF và tạo JPEG xem trước tối đa 1024 px
 mỗi chiều; không sửa nguyên bản. Gửi catalog thật và cấu hình hiện tại.
@@ -39,8 +57,10 @@ Frontend giữ tối đa 100 sự kiện trong phiên; mỗi lượt gửi 20 s�
 gần nhất. Ghi nhận đề xuất, áp dụng, xử lý AI/thủ công và kết quả thật. Slider
 không tạo tin nhắn riêng; chỉ xử lý thành công mới tạo phiên bản. Lịch sử và
 kết quả gần nhất không bị xóa khi đổi slider/Undo/reset; đổi ảnh xóa toàn bộ.
-Không lưu lịch sử qua reload, không gửi ảnh của mọi phiên bản. Kết quả cũ có
-TTL 24h; bản legacy thiếu snapshot phải xử lý lại trước khi tham chiếu.
+`answer`/`unsupported` vẫn vào history để lượt sau hiểu ngữ cảnh; `off_topic`
+bị loại khỏi history. Không lưu lịch sử qua reload, không gửi ảnh của mọi
+phiên bản. Kết quả cũ có TTL 24h; bản legacy thiếu snapshot phải xử lý lại
+trước khi tham chiếu.
 
 Các lỗi: 503 AI_NOT_CONFIGURED / AI_RATE_LIMITED, 502 AI_PROVIDER_ERROR /
 AI_INVALID_RESPONSE, 504 AI_TIMEOUT. Thông báo không đưa nguyên lỗi provider,
@@ -49,12 +69,14 @@ key hoặc ảnh vào response.
 ## Log kiểm tra request/output
 
 Mặc định `RESIM_AI_DEBUG_LOG=true`: terminal chạy uvicorn in `[AI <id>]`
-với các sự kiện `REQUEST`, `RESPONSE`, `VALIDATED_PROPOSAL` hoặc `ERROR`.
+với các sự kiện `SCOPE_PREFILTER`, `REQUEST`, `RESPONSE`, `VALIDATED_DECISION`,
+`VALIDATED_PROPOSAL` hoặc `ERROR`.
 REQUEST bao gồm toàn bộ system prompt, yêu cầu, catalog, cấu hình hiện tại,
 tham số provider và ảnh preview base64. RESPONSE là nguyên body provider kể cả
-HTTP lỗi hoặc JSON/đề xuất không hợp lệ. Không log header chứa key; key cấu hình
-được che nếu xuất hiện trong nội dung. Timeout/lỗi kết nối không có response
-thì chỉ log mã lỗi, không bịa output.
+HTTP lỗi hoặc JSON/đề xuất không hợp lệ. Với `off_topic`, backend vẫn log
+response gốc nhưng response trả người dùng chỉ chứa câu cố định. Không log
+header chứa key; key cấu hình được che nếu xuất hiện trong nội dung.
+Timeout/lỗi kết nối không có response thì chỉ log mã lỗi, không bịa output.
 
 Giới hạn an toàn response vẫn là 1 MB; nếu vượt chỉ ghi prefix và đánh dấu
 `truncated: true`. Các phản hồi trong giới hạn không bị cắt.
@@ -64,10 +86,11 @@ Không có file log riêng; log hiện tại terminal/backend log collector.
 
 ## Kiểm chứng cập nhật hội thoại
 
-- `python -m pytest -q --tb=short -p no:cacheprovider`: 231 passed,
+- `python -m pytest -q --tb=short -p no:cacheprovider`: 241 passed,
   một cảnh báo deprecation Starlette/httpx.
-- `npm.cmd test`: 36 passed, gồm hội thoại nhiều lượt, ảnh/cấu hình kết quả
-  chỉnh tay và từ AI, Undo/reset không mất snapshot, thay ảnh xóa chat.
+- `npm.cmd test`: 52 passed, gồm hội thoại nhiều lượt, ảnh/cấu hình kết quả
+  chỉnh tay và từ AI, quyết định `answer`/`unsupported`/`off_topic`, Undo/reset
+  không mất snapshot, thay ảnh xóa chat.
 - `npm.cmd run typecheck`: đạt.
 - Kiểm tra trình duyệt với backend/frontend thật: upload ảnh kiểm thử được
   sinh riêng, xử lý Gamma thủ công, thấy thumbnail thật và cấu hình trong chat.
@@ -82,9 +105,9 @@ Cần key/model hợp lệ để nghiệm thu thực tế; có thể phát sinh 
 ## Kiểm chứng MVP
 
 - `python -m pytest -q tests/test_ai_advisor.py tests/test_api.py --tb=short -p no:cacheprovider`:
-  51 passed, một cảnh báo deprecation Starlette/httpx.
-- Frontend `npm.cmd test`: 28 passed, gồm phân tích → áp dụng không tự xử lý
-  và lỗi AI không tạo đề xuất giả.
+  68 passed, một cảnh báo deprecation Starlette/httpx.
+- Frontend `npm.cmd test`: 52 passed, gồm phân tích → áp dụng không tự xử lý,
+  lỗi AI không tạo đề xuất giả và thông báo ngoài phạm vi không có nút áp dụng.
 - `npm.cmd run lint`, `npm.cmd run typecheck`, `git diff --check`: đạt
   (git chỉ cảnh báo chuyển line ending).
 - Lỗi OpenCV mở đường dẫn model có dấu đã được sửa sau MVP: nạp Caffe

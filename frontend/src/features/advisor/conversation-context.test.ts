@@ -6,7 +6,7 @@ describe("conversationHistory", () => {
   it("labels completed AI turns with their source version without adding image URLs", () => {
     const history = conversationHistory([
       { id: "user", kind: "user", text: "Giảm vàng", status: "succeeded", error: null, versionId: "older-result" },
-      { id: "reply", kind: "assistant", proposal: { analysis: "Giảm nhẹ", steps: [] }, versionId: "older-result" },
+      { id: "reply", kind: "assistant", proposal: { decision: "advise", analysis: "Giảm nhẹ", steps: [] }, versionId: "older-result" },
       { id: "original", kind: "user", text: "Bắt đầu lại", status: "succeeded", error: null, versionId: null },
     ]);
     expect(history[0].text).toBe("[Ngữ cảnh: older-result] Giảm vàng");
@@ -39,5 +39,26 @@ describe("conversationHistory", () => {
       { algorithm: "adjust_gamma", params: { gamma: 1.2 } },
     ] });
     expect(JSON.stringify(history)).not.toContain("/api/results/");
+  });
+
+  it("drops off-topic turns and keeps image answers as context", () => {
+    const history = conversationHistory([
+      {
+        id: "math", kind: "user", text: "1 + 1 = ?", status: "succeeded", error: null,
+        excludedFromHistory: true,
+      },
+      { id: "math-notice", kind: "notice", decision: "off_topic", text: "Ngoài phạm vi.", versionId: null },
+      {
+        id: "question", kind: "user", text: "Ảnh này bị gì?", status: "succeeded", error: null,
+        versionId: null,
+      },
+      { id: "answer", kind: "notice", decision: "answer", text: "Ảnh hơi mờ và nhiễu.", versionId: null },
+      { id: "unsupported", kind: "notice", decision: "unsupported", text: "Không có công cụ xóa vật thể.", versionId: null },
+    ]);
+    expect(history).toEqual([
+      { kind: "user", text: "[Ngữ cảnh: ảnh gốc] Ảnh này bị gì?", steps: [] },
+      { kind: "assistant", text: "[Ngữ cảnh: ảnh gốc] Ảnh hơi mờ và nhiễu.", steps: [] },
+      { kind: "assistant", text: "[Ngữ cảnh: ảnh gốc] Không có công cụ xóa vật thể.", steps: [] },
+    ]);
   });
 });

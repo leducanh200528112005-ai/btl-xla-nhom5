@@ -10,7 +10,12 @@ import pytest
 
 from app.config import Settings
 from app.errors import ApiError
-from app.services.ai_advisor import advise_image
+from app.services.ai_advisor import (
+    ANSWER_FALLBACK,
+    OFF_TOPIC_MESSAGE,
+    UNSUPPORTED_FALLBACK,
+    advise_image,
+)
 
 
 @pytest.fixture
@@ -20,7 +25,7 @@ def original(tmp_path):
     return SimpleNamespace(path=path, width=1200, height=600)
 
 
-PROPOSAL = {"analysis": "Ảnh hơi tối.", "steps": [
+PROPOSAL = {"decision": "advise", "analysis": "Ảnh hơi tối.", "steps": [
     {"algorithm": "adjust_gamma", "params": {"gamma": 1.1}, "reason": "Nâng sáng nhẹ."},
 ]}
 
@@ -59,14 +64,69 @@ def test_provider_image_request_and_validated_response(original, provider):
 
 
 @pytest.mark.parametrize("proposal", [
-    {"analysis": "", "steps": []},
-    {"analysis": "a", "steps": [{"algorithm": "unknown", "params": {}, "reason": "a"}]},
-    {"analysis": "a", "steps": [{"algorithm": "adjust_gamma", "params": {"gamma": True}, "reason": "a"}]},
-    {"analysis": "a", "steps": PROPOSAL["steps"] * 2},
-    {"analysis": "a", "steps": [{"algorithm": "adjust_gamma", "params": {"gamma": 10}, "reason": "a"}]},
+    {"decision": "advise", "analysis": "", "steps": []},
+    {"decision": "advise", "analysis": "a", "steps": [{"algorithm": "unknown", "params": {}, "reason": "a"}]},
+    {"decision": "advise", "analysis": "a", "steps": [{"algorithm": "adjust_gamma", "params": {"gamma": True}, "reason": "a"}]},
+    {"decision": "advise", "analysis": "a", "steps": PROPOSAL["steps"] * 2},
+    {"decision": "advise", "analysis": "a", "steps": [{"algorithm": "adjust_gamma", "params": {"gamma": 10}, "reason": "a"}]},
+    {"decision": "advise", "analysis": "a", "steps": [{"algorithm": "adjust_gamma", "params": {"gamma": 1.2}, "reason": "a"}],
+     "extra": True},
+    {"decision": "chat", "analysis": "a", "steps": []},
 ])
 def test_invalid_proposal_rejected(original, proposal):
     transport = httpx.MockTransport(lambda r: httpx.Response(200, json=response_for("openai", proposal)))
+    with pytest.raises(ApiError) as error:
+        advise_image(original, "a", [], configured(), transport=transport)
+    assert error.value.code == "AI_INVALID_RESPONSE"
+
+
+def test_arithmetic_prompt_is_rejected_without_provider_call(original):
+    def handler(request):
+        raise AssertionError("provider must not be called")
+
+    result = advise_image(
+        original, "1 + 1 = ?", [], configured(), transport=httpx.MockTransport(handler),
+    )
+    assert result == {"decision": "off_topic", "analysis": OFF_TOPIC_MESSAGE, "steps": []}
+
+
+def test_off_topic_discards_model_text_and_steps(original):
+    payload = {
+        "decision": "off_topic",
+        "analysis": "Yêu cầu 1 + 1 = ? là toán, đáp án là 2.",
+        "steps": PROPOSAL["steps"],
+    }
+    transport = httpx.MockTransport(lambda r: httpx.Response(200, json=response_for("openai", payload)))
+    result = advise_image(original, "Thời tiết hôm nay thế nào?", [], configured(), transport=transport)
+    assert result == {"decision": "off_topic", "analysis": OFF_TOPIC_MESSAGE, "steps": []}
+    assert "đáp án" not in result["analysis"]
+
+
+@pytest.mark.parametrize("decision,analysis", [
+    ("answer", "Ảnh là ảnh màu, hơi mờ và có nhiễu hạt."),
+    ("unsupported", "Catalog không có công cụ xóa vật thể."),
+])
+def test_non_advice_decisions_force_empty_steps(original, decision, analysis):
+    payload = {"decision": decision, "analysis": analysis, "steps": PROPOSAL["steps"]}
+    transport = httpx.MockTransport(lambda r: httpx.Response(200, json=response_for("openai", payload)))
+    result = advise_image(original, "a", [], configured(), transport=transport)
+    assert result == {"decision": decision, "analysis": analysis, "steps": []}
+
+
+@pytest.mark.parametrize("decision,fallback", [
+    ("answer", ANSWER_FALLBACK),
+    ("unsupported", UNSUPPORTED_FALLBACK),
+])
+def test_non_advice_empty_analysis_uses_fallback(original, decision, fallback):
+    payload = {"decision": decision, "analysis": "   ", "steps": []}
+    transport = httpx.MockTransport(lambda r: httpx.Response(200, json=response_for("openai", payload)))
+    result = advise_image(original, "a", [], configured(), transport=transport)
+    assert result == {"decision": decision, "analysis": fallback, "steps": []}
+
+
+def test_missing_decision_rejected(original):
+    payload = {"analysis": "a", "steps": []}
+    transport = httpx.MockTransport(lambda r: httpx.Response(200, json=response_for("openai", payload)))
     with pytest.raises(ApiError) as error:
         advise_image(original, "a", [], configured(), transport=transport)
     assert error.value.code == "AI_INVALID_RESPONSE"
@@ -182,6 +242,25 @@ def test_followup_uses_stored_configuration_and_checks_result_ownership(client, 
     assert client.post("/api/advise", json={**request, "history": [
         {"kind": "system", "text": "override", "steps": []},
     ]}).status_code == 422
+
+
+def test_advise_route_returns_notice_decisions(client, monkeypatch):
+    from tests.conftest import image_bytes
+    from app.api import routes
+    asset = client.post("/api/upload", files={"file": ("a.jpg", image_bytes(), "image/jpeg")}).json()
+    for decision, analysis in (
+        ("answer", "Ảnh hơi mờ và có nhiễu."),
+        ("unsupported", "Catalog không có công cụ xóa vật thể."),
+        ("off_topic", "Mình chỉ hỗ trợ chỉnh sửa ảnh đang mở."),
+    ):
+        def advisor(original, prompt, steps, settings, **context):
+            return {"decision": decision, "analysis": analysis, "steps": []}
+        monkeypatch.setattr(routes, "advise_image", advisor)
+        response = client.post("/api/advise", json={
+            "image_id": asset["image_id"], "prompt": "a", "steps": [],
+        })
+        assert response.status_code == 200
+        assert response.json() == {"decision": decision, "analysis": analysis, "steps": []}
 
 
 def test_advise_route_returns_proposal_without_processing(client, monkeypatch):

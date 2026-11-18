@@ -143,6 +143,10 @@ Footer sidebar luôn nhìn thấy, không bị cuộn mất: `Đặt lại` và 
 > “Đã xử lý · Phiên bản N” và bị khóa để không tạo bản trùng. Lỗi ở lượt user có thử gửi lại. Đổi ảnh xóa
 > timeline/snapshot và bỏ response cũ. Không có lưu phiên qua reload/database.
 > Những mô tả single-turn/501 dưới đây là lịch sử, được thay thế bởi cập nhật này.
+> Phạm vi phản hồi: `advise` (có đề xuất), `answer` (trả lời về ảnh, không thông số),
+> `unsupported` (yêu cầu chỉnh sửa nhưng thiếu công cụ) và `off_topic` (câu từ chối
+> cố định). Ba nhánh sau render thành notice, không có nút áp dụng; `off_topic`
+> không được gửi lại trong history, `answer`/`unsupported` vẫn làm ngữ cảnh.
 
 - Bảng tư vấn có cấu trúc, không làm chatbot giả.
 - Gợi ý chữ tĩnh giải thích AI sẽ nhận xét ảnh và đề xuất thông số; không trình bày gợi ý đó như câu trả lời của AI.

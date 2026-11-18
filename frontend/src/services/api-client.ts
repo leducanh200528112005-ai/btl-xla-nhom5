@@ -263,19 +263,30 @@ function assertProcessResult(value: unknown): asserts value is ProcessResult {
 }
 
 function assertAdviceResponse(value: unknown): asserts value is AdviceResponse {
+  const decisions = ["advise", "answer", "unsupported", "off_topic"];
   if (
     !isRecord(value) ||
+    typeof value.decision !== "string" ||
+    !decisions.includes(value.decision) ||
     typeof value.analysis !== "string" ||
-    !Array.isArray(value.steps) ||
-    !value.steps.every(
-      (step) =>
-        isRecord(step) &&
-        typeof step.algorithm === "string" &&
-        typeof step.reason === "string" &&
-        isRecord(step.params) &&
-        Object.values(step.params).every(isFiniteNumber),
-    )
+    value.analysis.length === 0 ||
+    !Array.isArray(value.steps)
   ) {
+    throw new ApiError("Phản hồi tư vấn từ máy chủ không hợp lệ.", {
+      status: null,
+      code: "INVALID_RESPONSE",
+    });
+  }
+
+  const validSteps = value.steps.every(
+    (step) =>
+      isRecord(step) &&
+      typeof step.algorithm === "string" &&
+      typeof step.reason === "string" &&
+      isRecord(step.params) &&
+      Object.values(step.params).every(isFiniteNumber),
+  );
+  if (!validSteps || (value.decision !== "advise" && value.steps.length > 0)) {
     throw new ApiError("Phản hồi tư vấn từ máy chủ không hợp lệ.", {
       status: null,
       code: "INVALID_RESPONSE",

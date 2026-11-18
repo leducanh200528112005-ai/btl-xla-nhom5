@@ -30,7 +30,7 @@ Tham khảo triển khai: [OpenCV morphology](https://docs.opencv.org/4.13.0/d9/
 - `scripts/verify_photo.py`: chạy từng thuật toán và pipeline qua FastAPI TestClient thật, tải/giải mã PNG, kiểm tra nguyên bản, xuất report và ảnh để xem. Không dùng mock model.
 - Frontend integration tests bổ sung đủ tám công cụ, hai lựa chọn denoise, kiểm tra thứ tự và tham số dạng số.
 
-AI tư vấn nằm ngoài tám chức năng xử lý ảnh, vẫn trả 501 rõ ràng. Không bịa phân tích hoặc đề xuất AI.
+AI tư vấn nằm ngoài tám chức năng xử lý ảnh; xem [AI-ADVISOR.md](AI-ADVISOR.md). Không bịa phân tích hoặc đề xuất AI.
 
 ## Lệnh kiểm tra
 

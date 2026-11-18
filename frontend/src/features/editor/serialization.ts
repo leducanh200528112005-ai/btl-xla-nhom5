@@ -1,5 +1,5 @@
 import type {
-  AdviceResponse,
+  AdviceProposal,
   AlgorithmDescriptor,
   ProcessingStep,
   ToolId,
@@ -110,7 +110,7 @@ export function configsEqual(left: EditorConfig, right: EditorConfig): boolean {
 export function configMatchesProposal(
   config: EditorConfig,
   catalog: AlgorithmDescriptor[],
-  proposal: AdviceResponse,
+  proposal: AdviceProposal,
 ): boolean {
   try {
     const current = serializeSteps(config, catalog);

@@ -86,7 +86,7 @@ describe("editorReducer", () => {
     expect(state.compareRightId).toBe("one");
     state = editorReducer(state, { type: "ADVISE_STARTED", generation: 0, prompt: "test", requestId: "request" });
     state = editorReducer(state, { type: "SELECT_VERSION", versionId: null });
-    state = editorReducer(state, { type: "ADVISE_SUCCEEDED", generation: 0, proposal: { analysis: "reply", steps: [] } });
+    state = editorReducer(state, { type: "ADVISE_SUCCEEDED", generation: 0, reply: { decision: "advise", analysis: "reply", steps: [] } });
     expect(state.chat.at(-1)).toMatchObject({ kind: "assistant", versionId: "one" });
     expect(state.activeVersionId).toBeNull();
   });
@@ -122,14 +122,44 @@ describe("editorReducer", () => {
     let state = editorReducer(initialEditorState, {
       type: "ADVISE_STARTED", generation: 0, requestId: "one", prompt: "First",
     });
-    const proposal = { analysis: "First reply", steps: [] };
-    state = editorReducer(state, { type: "ADVISE_SUCCEEDED", generation: 0, proposal });
+    const proposal = { decision: "advise" as const, analysis: "First reply", steps: [] };
+    state = editorReducer(state, { type: "ADVISE_SUCCEEDED", generation: 0, reply: proposal });
     state = editorReducer(state, { type: "ADVISE_STARTED", generation: 0, requestId: "two", prompt: "Second" });
     state = editorReducer(state, { type: "ADVISE_FAILED", generation: 0,
       error: new ApiError("offline", { status: null, code: "NETWORK_ERROR" }) });
     expect(state.chat[0]).toMatchObject({ status: "succeeded" });
     expect(state.chat[1]).toMatchObject({ kind: "assistant", proposal });
     expect(state.chat[2]).toMatchObject({ kind: "user", status: "error", error: "offline" });
+  });
+
+  it("records non-advice decisions as notices without creating a proposal", () => {
+    let state = editorReducer(initialEditorState, {
+      type: "ADVISE_STARTED", generation: 0, requestId: "math", prompt: "1 + 1 = ?",
+    });
+    state = editorReducer(state, {
+      type: "ADVISE_SUCCEEDED", generation: 0,
+      reply: { decision: "off_topic", analysis: "Ngoài phạm vi.", steps: [] },
+    });
+    expect(state.proposal).toBeNull();
+    expect(state.chat[0]).toMatchObject({
+      kind: "user", status: "succeeded", excludedFromHistory: true,
+    });
+    expect(state.chat[1]).toMatchObject({
+      kind: "notice", decision: "off_topic", text: "Ngoài phạm vi.",
+    });
+
+    state = editorReducer(state, {
+      type: "ADVISE_STARTED", generation: 0, requestId: "answer", prompt: "Ảnh này bị gì?",
+    });
+    state = editorReducer(state, {
+      type: "ADVISE_SUCCEEDED", generation: 0,
+      reply: { decision: "answer", analysis: "Ảnh hơi mờ.", steps: [] },
+    });
+    expect(state.proposal).toBeNull();
+    expect(state.chat[2]).toMatchObject({
+      kind: "user", status: "succeeded", excludedFromHistory: false,
+    });
+    expect(state.chat[3]).toMatchObject({ kind: "notice", decision: "answer", text: "Ảnh hơi mờ." });
   });
 
   it("records config changes, undoes them, and resets to catalog defaults", () => {

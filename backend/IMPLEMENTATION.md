@@ -1,4 +1,4 @@
-> Cập nhật mới nhất 06/11/2026: đã hoàn thiện và tích hợp cả tám nhóm công cụ (chín thuật toán). Xem [RESTORATION.md](RESTORATION.md) cho thuật toán, kiểm thử và kết quả trên ảnh người dùng. Nội dung người 3/4 dưới đây là bàn giao lịch sử; giới hạn chỉ chạy ba thuật toán đã được thay thế. AI tư vấn vẫn là stub.
+> Cập nhật mới nhất 06/11/2026: đã hoàn thiện và tích hợp cả tám nhóm công cụ (chín thuật toán). Xem [RESTORATION.md](RESTORATION.md) cho thuật toán, kiểm thử và kết quả trên ảnh người dùng. Nội dung người 3/4 dưới đây là bàn giao lịch sử; giới hạn chỉ chạy ba thuật toán đã được thay thế. AI tư vấn dùng provider vision riêng; xem [AI-ADVISOR.md](AI-ADVISOR.md).
 
 # Bàn giao người 3 và 4 — 2026-11-06
 
@@ -23,7 +23,7 @@ Nguồn mô hình: [richzhang/colorization](https://github.com/richzhang/coloriz
 - Kiểm tra kích thước đầu ra trước resize; mặc định tối đa 32 triệu pixel. Ảnh 20 triệu pixel không thể phóng 4× với giới hạn này.
 - FE nhận trạng thái catalog mới, hiện metadata kết quả thật, so sánh trong cùng khung kể cả ảnh upscale, khóa controls khi xử lý và bỏ response cũ khi đổi ảnh.
 - Khi đổi/undo/reset cấu hình, kết quả cũ bị xóa để tránh gắn kết quả với thông số khác. So sánh/tải chỉ mở khi có result thật.
-- AI tư vấn vẫn là stub. Các thay đổi hợp đồng được ghi trong docs/api-contract.md; các spec scaffold có ghi chú phạm vi mới.
+- AI tư vấn dùng provider vision riêng, không nằm trong pipeline xử lý ảnh; xem [AI-ADVISOR.md](AI-ADVISOR.md). Các thay đổi hợp đồng được ghi trong docs/api-contract.md; các spec scaffold có ghi chú phạm vi mới.
 
 ## Cài đặt và chạy
 

@@ -9,7 +9,7 @@ Các ghi chú AI stub/501 bên dưới là trạng thái lịch sử, được t
 
 Frontend trình chỉnh ảnh cũ và khung FastAPI để chia việc cho nhóm BTL Xử lý ảnh.
 
-**Hiện tại:** đã ghép giảm ố vàng (Lab), tô màu (ECCV16 CPU) và upscale 2×/4× (Lanczos) với frontend: xử lý, xem kết quả, so sánh và tải PNG thật. Phần người 1/2 và AI chưa bật trong pipeline, trả `501 NOT_IMPLEMENTED`. Xem [bàn giao người 3/4](backend/IMPLEMENTATION.md).
+**Hiện tại:** đã ghép đủ tám nhóm công cụ (chín thuật toán), gồm giảm ố vàng (Lab), tô màu (ECCV16 CPU), upscale 2×/4× (Lanczos) với frontend: xử lý, xem kết quả, so sánh và tải PNG thật. AI tư vấn chạy riêng qua provider vision, không nằm trong pipeline xử lý ảnh. Xem [bàn giao người 3/4](backend/IMPLEMENTATION.md).
 
 ## Giao diện
 
@@ -61,8 +61,8 @@ Mở <http://localhost:3000>. Biến `NEXT_PUBLIC_API_BASE_URL` trong `.env.loca
 1. Vào `/`: đã thấy editor và vùng chọn/kéo thả ảnh.
 2. Chọn một JPG/PNG nhỏ: preview xuất hiện ngay, backend nhận ảnh và trả ID.
 3. Bật một chức năng, chỉnh tham số: ảnh gốc vẫn giữ nguyên vì chưa xử lý.
-4. Bật Giảm ố vàng, Tô màu ảnh hoặc Nâng độ phân giải rồi nhấn **Xử lý ảnh**. Backend chạy các bước và trả PNG kết quả. Các công cụ còn lại vẫn trả 501 nếu được chọn.
-5. Chuyển tab **AI tư vấn**, nhập yêu cầu: backend cũng trả thông báo chưa triển khai, không có lời tư vấn mẫu.
+4. Bật các công cụ mong muốn rồi nhấn **Xử lý ảnh**. Backend chạy các bước và trả PNG kết quả; mọi nhóm công cụ trong catalog đều đã triển khai.
+5. Chuyển tab **AI tư vấn**, nhập yêu cầu: backend trả `decision` là `advise`, `answer`, `unsupported` hoặc `off_topic`. Chỉ `advise` có nút áp dụng cấu hình; câu hỏi ngoài phạm vi không tạo đề xuất.
 6. **Tải kết quả**, **So sánh** và **Kết quả** được mở sau khi xử lý thành công. Thay đổi cấu hình xóa kết quả cũ để tránh nhầm thông số.
 7. Đổi ảnh ngay trong editor: không đổi URL; cấu hình/lịch sử/kết quả của ảnh cũ được xóa.
 
@@ -87,9 +87,9 @@ npm.cmd run build
 
 ## 5. Bàn giao cho thành viên làm thuật toán
 
-Đọc [hợp đồng API](docs/api-contract.md) và [bàn giao người 3/4](backend/IMPLEMENTATION.md). Các hàm của người 1/2 được giữ nguyên; chỉ ba thuật toán đã triển khai trong đợt này được đăng ký trong pipeline.
+Đọc [hợp đồng API](docs/api-contract.md) và [bàn giao người 3/4](backend/IMPLEMENTATION.md). Các hàm của người 1/2 được giữ nguyên; tám nhóm công cụ đã được đăng ký trong pipeline.
 
-Ảnh nội bộ là NumPy uint8 BGR, không sửa đầu vào. Thành viên tiếp theo cần kiểm thử thuật toán của mình, thêm vào registry pipeline và đổi status trong catalog; các tham số hiện có giữ theo hợp đồng. AI advisor vẫn là stub.
+Ảnh nội bộ là NumPy uint8 BGR, không sửa đầu vào. Thành viên tiếp theo cần kiểm thử thuật toán của mình, thêm vào registry pipeline và đổi status trong catalog; các tham số hiện có giữ theo hợp đồng. AI advisor dùng provider vision đã cấu hình và chỉ trả quyết định/đề xuất, không tự chạy process.
 
 ## Tài liệu triển khai
 

@@ -53,6 +53,7 @@ beforeEach(() => {
   });
   processReply = async () => Response.json(result);
   adviceReply = async () => Response.json({
+    decision: "advise",
     analysis: "Chỉ cần giảm vàng nhẹ.",
     steps: [{ algorithm: "remove_yellow_cast", params: { strength: 0.2 }, reason: "Giữ màu tự nhiên." }],
   });
@@ -189,6 +190,7 @@ describe("restoration editor integration", () => {
       steps: expect.arrayContaining([{ algorithm: "colorize_image", params: { strength: 1 } }]) });
     await selectVersion("Chỉnh tiếp Phiên bản 2");
     await act(async () => resolveAdvice(Response.json({
+      decision: "advise",
       analysis: "Giảm vàng cho phiên bản 1.",
       steps: [{ algorithm: "remove_yellow_cast", params: { strength: 0.2 }, reason: "Giữ màu." }],
     })));
@@ -332,6 +334,59 @@ describe("restoration editor integration", () => {
     fireEvent.change(screen.getByLabelText("Bạn muốn cải thiện điều gì?"), { target: { value: "Giữ tự nhiên" } });
     fireEvent.click(screen.getByRole("button", { name: "Gửi yêu cầu" }));
     await screen.findByText("Chưa cấu hình AI.");
+    expect(screen.queryByRole("button", { name: "Áp dụng cấu hình" })).toBeNull();
+  });
+
+  it("rejects off-topic chat without offering a configuration and drops it from later history", async () => {
+    adviceReply = async () => Response.json({
+      decision: "off_topic",
+      analysis: "Mình chỉ hỗ trợ các yêu cầu chỉnh sửa hoặc khôi phục ảnh đang mở.",
+      steps: [],
+    });
+    await uploadAndConfigure();
+    fireEvent.click(screen.getByRole("tab", { name: /AI tư vấn/ }));
+    fireEvent.change(screen.getByLabelText("Bạn muốn cải thiện điều gì?"), { target: { value: "1 + 1 = ?" } });
+    fireEvent.click(screen.getByRole("button", { name: "Gửi yêu cầu" }));
+    await screen.findByText("Ngoài phạm vi");
+    expect(screen.getByText("Mình chỉ hỗ trợ các yêu cầu chỉnh sửa hoặc khôi phục ảnh đang mở.")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Áp dụng cấu hình" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Đã khớp đề xuất · Xử lý ảnh" })).toBeNull();
+
+    adviceReply = async () => Response.json({
+      decision: "advise",
+      analysis: "Chỉ cần giảm vàng nhẹ.",
+      steps: [{ algorithm: "remove_yellow_cast", params: { strength: 0.2 }, reason: "Giữ màu." }],
+    });
+    fireEvent.change(screen.getByLabelText("Bạn muốn cải thiện điều gì?"), { target: { value: "Làm nét ảnh" } });
+    fireEvent.click(screen.getByRole("button", { name: "Gửi yêu cầu" }));
+    await screen.findByText("Chỉ cần giảm vàng nhẹ.", {}, { timeout: 3000 });
+    const calls = fetchMock.mock.calls.filter(([url]) => url.endsWith("/api/advise"));
+    expect(JSON.parse(calls[1][1].body).history).toEqual([]);
+  });
+
+  it("renders image answers and unsupported edits as notices with no apply action", async () => {
+    adviceReply = async () => Response.json({
+      decision: "answer",
+      analysis: "Ảnh hơi mờ và có nhiễu hạt.",
+      steps: [],
+    });
+    await uploadAndConfigure();
+    fireEvent.click(screen.getByRole("tab", { name: /AI tư vấn/ }));
+    fireEvent.change(screen.getByLabelText("Bạn muốn cải thiện điều gì?"), { target: { value: "Ảnh này bị gì?" } });
+    fireEvent.click(screen.getByRole("button", { name: "Gửi yêu cầu" }));
+    await screen.findByText("Trả lời về ảnh");
+    expect(screen.getByText("Ảnh hơi mờ và có nhiễu hạt.")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Áp dụng cấu hình" })).toBeNull();
+
+    adviceReply = async () => Response.json({
+      decision: "unsupported",
+      analysis: "Catalog không có công cụ xóa vật thể.",
+      steps: [],
+    });
+    fireEvent.change(screen.getByLabelText("Bạn muốn cải thiện điều gì?"), { target: { value: "Xóa người phía sau" } });
+    fireEvent.click(screen.getByRole("button", { name: "Gửi yêu cầu" }));
+    await screen.findByText("Chưa hỗ trợ thao tác này");
+    expect(screen.getByText("Catalog không có công cụ xóa vật thể.")).toBeTruthy();
     expect(screen.queryByRole("button", { name: "Áp dụng cấu hình" })).toBeNull();
   });
 

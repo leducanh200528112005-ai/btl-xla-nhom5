@@ -88,10 +88,21 @@ export type ConversationEvent = {
 
 export type AdviceStep = ProcessingStep & { reason: string };
 
-export type AdviceResponse = {
+export type AdviceDecision = "advise" | "answer" | "unsupported" | "off_topic";
+
+export type AdviceProposal = {
+  decision: "advise";
   analysis: string;
   steps: AdviceStep[];
 };
+
+export type AdviceNotice = {
+  decision: Exclude<AdviceDecision, "advise">;
+  analysis: string;
+  steps: [];
+};
+
+export type AdviceResponse = AdviceProposal | AdviceNotice;
 
 export type ApiErrorDetails = { field: string; message: string }[] | null;
 

@@ -140,6 +140,7 @@ describe("serializeSteps", () => {
     const config = createDefaultConfig(catalog);
     config.enabled.brightness = true;
     const proposal = {
+      decision: "advise" as const,
       analysis: "Nâng sáng",
       steps: [{ algorithm: "adjust_gamma", params: { gamma: 1 }, reason: "Nhẹ" }],
     };
@@ -155,7 +156,7 @@ describe("serializeSteps", () => {
 
   it("matches empty proposals only when all tools are off", () => {
     const config = createDefaultConfig(catalog);
-    const proposal = { analysis: "Giữ nguyên", steps: [] };
+    const proposal = { decision: "advise" as const, analysis: "Giữ nguyên", steps: [] };
     expect(configMatchesProposal(config, catalog, proposal)).toBe(true);
     config.enabled.brightness = true;
     expect(configMatchesProposal(config, catalog, proposal)).toBe(false);
@@ -166,6 +167,7 @@ describe("serializeSteps", () => {
     config.enabled.denoise = true;
     config.selectedAlgorithms.denoise = "denoise_bilateral";
     const proposal = {
+      decision: "advise" as const,
       analysis: "Giảm nhiễu",
       steps: [{
         algorithm: "denoise_bilateral",

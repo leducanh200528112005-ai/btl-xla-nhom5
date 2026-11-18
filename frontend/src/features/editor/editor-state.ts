@@ -1,5 +1,6 @@
 import { ApiError } from "@/services/api-client";
 import type {
+  AdviceProposal,
   AdviceResponse,
   AlgorithmDescriptor,
   ImageAsset,
@@ -35,8 +36,23 @@ export type SavedVersion = ResultSnapshot & {
 };
 
 export type ChatEntry =
-  | { id: string; kind: "user"; text: string; status: "loading" | "succeeded" | "error"; error: string | null; versionId?: string | null }
-  | { id: string; kind: "assistant"; proposal: AdviceResponse; versionId?: string | null }
+  | {
+      id: string;
+      kind: "user";
+      text: string;
+      status: "loading" | "succeeded" | "error";
+      error: string | null;
+      versionId?: string | null;
+      excludedFromHistory?: boolean;
+    }
+  | { id: string; kind: "assistant"; proposal: AdviceProposal; versionId?: string | null }
+  | {
+      id: string;
+      kind: "notice";
+      decision: "answer" | "unsupported" | "off_topic";
+      text: string;
+      versionId?: string | null;
+    }
   | { id: string; kind: "applied"; steps: ProcessingStep[] }
   | ({ id: string; kind: "processed" } & ResultSnapshot);
 
@@ -63,7 +79,7 @@ export type EditorState = {
   result: ProcessResult | null;
   adviseStatus: RequestStatus;
   adviseError: ApiError | null;
-  proposal: AdviceResponse | null;
+  proposal: AdviceProposal | null;
   chat: ChatEntry[];
   pendingAdviceId: string | null;
   latestResult: ResultSnapshot | null;
@@ -106,7 +122,7 @@ export type EditorAction =
   | { type: "PROCESS_SUCCEEDED"; generation: number; result: ProcessResult }
   | { type: "PROCESS_FAILED"; generation: number; error: ApiError }
   | { type: "ADVISE_STARTED"; generation: number; prompt: string; requestId: string }
-  | { type: "ADVISE_SUCCEEDED"; generation: number; proposal: AdviceResponse }
+  | { type: "ADVISE_SUCCEEDED"; generation: number; reply: AdviceResponse }
   | { type: "ADVISE_FAILED"; generation: number; error: ApiError };
 
 const initialConfig = createDefaultConfig([]);
@@ -388,18 +404,45 @@ export function editorReducer(state: EditorState, action: EditorAction): EditorS
     case "ADVISE_SUCCEEDED":
       return action.generation !== state.generation
         ? state
-        : {
-            ...state,
-            adviseStatus: "succeeded",
-            adviseError: null,
-            proposal: action.proposal,
-            chat: appendChat(state.chat.map((entry) =>
+        : (() => {
+            const chat = state.chat.map((entry) =>
               entry.kind === "user" && entry.id === state.pendingAdviceId
-                ? { ...entry, status: "succeeded" as const } : entry), {
-              id: `${state.pendingAdviceId}-reply`, kind: "assistant", proposal: action.proposal, versionId: state.pendingAdviceVersionId,
-            }),
-            pendingAdviceId: null,
-          };
+                ? {
+                    ...entry,
+                    status: "succeeded" as const,
+                    excludedFromHistory: action.reply.decision === "off_topic",
+                  }
+                : entry);
+            if (action.reply.decision === "advise") {
+              return {
+                ...state,
+                adviseStatus: "succeeded" as const,
+                adviseError: null,
+                proposal: action.reply,
+                chat: appendChat(chat, {
+                  id: `${state.pendingAdviceId}-reply`,
+                  kind: "assistant",
+                  proposal: action.reply,
+                  versionId: state.pendingAdviceVersionId,
+                }),
+                pendingAdviceId: null,
+              };
+            }
+            return {
+              ...state,
+              adviseStatus: "succeeded" as const,
+              adviseError: null,
+              proposal: null,
+              chat: appendChat(chat, {
+                id: `${state.pendingAdviceId}-notice`,
+                kind: "notice",
+                decision: action.reply.decision,
+                text: action.reply.analysis,
+                versionId: state.pendingAdviceVersionId,
+              }),
+              pendingAdviceId: null,
+            };
+          })();
     case "ADVISE_FAILED":
       return action.generation !== state.generation
         ? state

@@ -35,7 +35,7 @@ import {
 import { ToolsPanel } from "@/features/tools/ToolsPanel";
 import { validateAndDecodeImage } from "@/lib/image-validation";
 import { ApiError, apiClient } from "@/services/api-client";
-import type { AdviceResponse } from "@/types/api";
+import type { AdviceProposal } from "@/types/api";
 
 type Operation = "connection" | "upload" | "process" | "advise" | "download";
 
@@ -279,7 +279,7 @@ export function Editor() {
     dispatch({ type: "ADVISE_STARTED", generation, prompt: prompt.trim(), requestId: crypto.randomUUID() });
 
     try {
-      const proposal = await apiClient.advise(
+      const reply = await apiClient.advise(
         {
           image_id: state.uploaded.image_id,
           prompt: prompt.trim(),
@@ -290,7 +290,7 @@ export function Editor() {
         controller.signal,
       );
       if (controller.signal.aborted || generationRef.current !== generation) return;
-      dispatch({ type: "ADVISE_SUCCEEDED", generation, proposal });
+      dispatch({ type: "ADVISE_SUCCEEDED", generation, reply });
     } catch (error) {
       if (controller.signal.aborted || generationRef.current !== generation) return;
       dispatch({ type: "ADVISE_FAILED", generation, error: asApiError(error) });
@@ -299,7 +299,7 @@ export function Editor() {
     }
   }, [abortOperation, state]);
 
-  const applyProposal = useCallback((proposal: AdviceResponse): string | null => {
+  const applyProposal = useCallback((proposal: AdviceProposal): string | null => {
     if (!state.catalog) return "Danh mục thuật toán chưa sẵn sàng.";
     if (proposal.steps.length > 8) return "Đề xuất vượt quá tám bước xử lý.";
 

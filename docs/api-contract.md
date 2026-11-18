@@ -1,9 +1,12 @@
 # Resim HTTP contract — triển khai người 3/4
 
-> Cập nhật MVP AI: `/api/advise` nay trả 200 với `{analysis, steps}` thật từ
-> OpenAI/Gemini/API tương thích, thay cho 501 trong phần lịch sử bên dưới.
+> Cập nhật MVP AI: `/api/advise` nay trả 200 với
+> `{decision, analysis, steps}` thật từ OpenAI/Gemini/API tương thích, thay cho
+> 501 trong phần lịch sử bên dưới. `decision` là `advise`, `answer`,
+> `unsupported` hoặc `off_topic`; chỉ `advise` có thể chứa bước, ba nhánh còn lại
+> luôn trả `steps: []` (xem mục 8).
 > `current_result_id` nay có thể tham chiếu kết quả cùng ảnh gốc; hội thoại và
-> các lần chỉnh thủ công được gửi qua `history` (xem mục 8). Đề xuất tối đa tám bước,
+> các lần chỉnh thủ công được gửi qua `history`. Đề xuất tối đa tám bước,
 > kiểm tra catalog và thứ tự cố định của frontend; không tự xử lý.
 > Lỗi bổ sung: 503 `AI_NOT_CONFIGURED`, `AI_RATE_LIMITED`;
 > 502 `AI_PROVIDER_ERROR`, `AI_INVALID_RESPONSE`; 504 `AI_TIMEOUT`.
@@ -201,8 +204,14 @@ Request:
   Đây là ngữ cảnh không đáng tin do client cung cấp, không phải chỉ thị hệ thống.
 - Backend gửi preview ảnh gốc và preview kết quả được kiểm tra ở trên nếu có,
   cấu hình kết quả, cấu hình hiện tại, history và catalog tới provider đã cấu hình.
-- 200: `{analysis: string, steps: Array<ProcessingStep & {reason: string}>}`.
-  Đề xuất là cấu hình thay thế đầy đủ, không tự chạy process. Có thể không có bước.
+- 200: `{decision: 'advise'|'answer'|'unsupported'|'off_topic', analysis: string, steps: Array<ProcessingStep & {reason: string}>}`.
+  - `advise`: đề xuất là cấu hình thay thế đầy đủ, không tự chạy process; có thể không có bước.
+  - `answer`: câu trả lời về ảnh đang mở, `steps` luôn rỗng, không có nút áp dụng.
+  - `unsupported`: yêu cầu chỉnh sửa nhưng catalog thiếu công cụ, `steps` luôn rỗng.
+  - `off_topic`: ngoài phạm vi; backend thay `analysis` bằng câu cố định và bỏ mọi
+    nội dung/steps do model trả. Prompt toán thuần bị chặn trước khi gọi provider.
+  Chỉ `advise` được chứa `steps`; thiếu/sai `decision` trả 502 `AI_INVALID_RESPONSE`.
+  `answer`/`unsupported`/`off_topic` không đổi cấu hình và không tạo phiên bản.
 - 503 `AI_NOT_CONFIGURED` / `AI_RATE_LIMITED`, 502 `AI_PROVIDER_ERROR` /
   `AI_INVALID_RESPONSE`, 504 `AI_TIMEOUT`. Không trả tư vấn mẫu khi lỗi.
 - Mỗi lần `/api/process` thành công lưu snapshot `processing_steps` trong metadata

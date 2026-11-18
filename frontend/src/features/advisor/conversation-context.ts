@@ -10,12 +10,16 @@ export function conversationHistory(chat: ChatEntry[]): ConversationEvent[] {
   return chat.flatMap((entry): ConversationEvent[] => {
     switch (entry.kind) {
       case "user":
-        return entry.status === "succeeded"
+        return entry.status === "succeeded" && !entry.excludedFromHistory
           ? [{ kind: "user", text: withVersion(entry.text, entry.versionId), steps: [] }] : [];
       case "assistant":
         return [{
           kind: "assistant", text: withVersion(entry.proposal.analysis, entry.versionId),
           steps: entry.proposal.steps.map(({ algorithm, params }) => ({ algorithm, params })),
+        }];
+      case "notice":
+        return entry.decision === "off_topic" ? [] : [{
+          kind: "assistant", text: withVersion(entry.text, entry.versionId), steps: [],
         }];
       case "applied":
         return [{ kind: "applied", text: "Đã áp dụng đề xuất vào cấu hình, chưa phải kết quả xử lý.", steps: entry.steps, source: "ai" }];

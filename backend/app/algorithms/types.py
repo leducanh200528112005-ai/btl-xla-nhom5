@@ -63,5 +63,6 @@ class AdvisedStep(PipelineStep):
 
 
 class AdviceResult(TypedDict):
+    decision: str
     analysis: str
     steps: list[AdvisedStep]

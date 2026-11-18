@@ -1,9 +1,9 @@
 "use client";
 
-import { ArrowUp, Bot, Check, LoaderCircle, Sparkles } from "lucide-react";
+import { ArrowUp, Bot, Check, Info, LoaderCircle, Sparkles } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
-import type { AdviceResponse, ProcessingStep } from "@/types/api";
-import { getActiveVersion, versionLabel, type EditorState, type ResultSnapshot } from "@/features/editor/editor-state";
+import type { AdviceProposal, ProcessingStep } from "@/types/api";
+import { getActiveVersion, versionLabel, type ChatEntry, type EditorState, type ResultSnapshot } from "@/features/editor/editor-state";
 import { configMatchesProposal, configsEqual, createDefaultConfig } from "@/features/editor/serialization";
 import { apiClient } from "@/services/api-client";
 
@@ -11,7 +11,7 @@ type AdvisorPanelProps = {
   state: EditorState;
   busy: boolean;
   onAdvise: (prompt: string) => void;
-  onApplyProposal: (proposal: AdviceResponse) => string | null;
+  onApplyProposal: (proposal: AdviceProposal) => string | null;
   onProcess: () => void;
 };
 
@@ -41,7 +41,19 @@ function ResultMessage({ snapshot, state }: { snapshot: ResultSnapshot; state: E
   </div>;
 }
 
-function stepsMatchProposal(steps: ProcessingStep[], proposal: AdviceResponse): boolean {
+function NoticeMessage({ entry }: { entry: Extract<ChatEntry, { kind: "notice" }> }) {
+  const label = entry.decision === "answer"
+    ? "Trả lời về ảnh"
+    : entry.decision === "unsupported"
+      ? "Chưa hỗ trợ thao tác này"
+      : "Ngoài phạm vi";
+  return <div className={`advisor-notice advisor-notice-${entry.decision}`}>
+    <p className="advisor-notice-label"><Info size={13} /> {label}</p>
+    <p className="advisor-notice-text">{entry.text}</p>
+  </div>;
+}
+
+function stepsMatchProposal(steps: ProcessingStep[], proposal: AdviceProposal): boolean {
   if (steps.length !== proposal.steps.length) return false;
   return proposal.steps.every((proposed, index) => {
     const step = steps[index];
@@ -52,7 +64,7 @@ function stepsMatchProposal(steps: ProcessingStep[], proposal: AdviceResponse): 
 }
 
 function ProposalMessage({ proposal, state, busy, onApplyProposal, onProcess, versionId }: {
-  proposal: AdviceResponse; state: EditorState; busy: boolean;
+  proposal: AdviceProposal; state: EditorState; busy: boolean;
   versionId: string | null;
   onApplyProposal: AdvisorPanelProps["onApplyProposal"];
   onProcess: AdvisorPanelProps["onProcess"];
@@ -84,7 +96,7 @@ function ProposalMessage({ proposal, state, busy, onApplyProposal, onProcess, ve
     </ol> : <p className="proposal-no-steps">Không cần bật công cụ nào theo đề xuất này.</p>}
     {applyError && <p role="alert" className="advisor-error">{applyError}</p>}
     <button type="button" className={`primary-button apply-proposal${matches ? " is-matched" : ""}`}
-      disabled={matches ? (!canApply || busy || !hasSteps || Boolean(processedVersion)) : (busy || !canApply || !sameVersion)}
+      disabled={matches ? (!canApply || busy || !hasSteps || Boolean(processedVersion)) : (busy || !canApply || !sameVersion || !hasSteps)}
       onClick={() => {
         if (matches) { onProcess(); return; }
         setApplyError(onApplyProposal(proposal));
@@ -105,6 +117,7 @@ function ProposalMessage({ proposal, state, busy, onApplyProposal, onProcess, ve
             ? `Cấu hình này đã tạo ${versionLabel(state, processedVersion.result.result_id)}. Chọn phiên bản đó để xem hoặc chỉnh tiếp.`
             : processing ? "Đang gửi yêu cầu xử lý tới máy chủ…"
             : "Cấu hình đang khớp đề xuất. Nhấn Xử lý ảnh để tạo phiên bản ngay tại đây."
+        : !hasSteps ? "Đề xuất không có bước nào để áp dụng."
         : !sameVersion ? `Chọn ${versionLabel(state, versionId)} trong danh sách để áp dụng đề xuất này.`
         : "Áp dụng để thay cấu hình hiện tại. Ảnh chưa tự thay đổi."}
     </p>
@@ -129,11 +142,11 @@ export function AdvisorPanel({ state, busy, onAdvise, onApplyProposal, onProcess
   }
 
   return <div className="advisor-panel chat-panel">
-    <div className="advisor-scroll-area chat-timeline" ref={scrollArea} aria-label="Lịch sử chỉnh ảnh">
+    <div className="advisor-scroll-area chat-timeline" ref={scrollArea} aria-label="Lịch sử hội thoại">
       {!state.chat.length && <div className="advisor-explainer">
         <div className="advisor-explainer-icon"><Bot size={18} /></div>
         <div><strong>Bắt đầu với mục tiêu của bạn</strong>
-          <p>AI xem ảnh gốc, phiên bản đang chỉnh và cấu hình đang chọn. Hai ảnh đối chiếu không thay đổi ngữ cảnh AI. Đổi ảnh gốc sẽ bắt đầu hội thoại mới.</p>
+          <p>AI xem ảnh gốc, phiên bản đang chỉnh và cấu hình đang chọn. Bạn có thể hỏi về ảnh hoặc mô tả điều muốn chỉnh sửa. Hai ảnh đối chiếu không thay đổi ngữ cảnh AI. Đổi ảnh gốc sẽ bắt đầu hội thoại mới.</p>
         </div>
       </div>}
       {state.chat.map((entry) => <article key={entry.id} className={`chat-entry chat-entry-${entry.kind}`}>
@@ -153,6 +166,11 @@ export function AdvisorPanel({ state, busy, onAdvise, onApplyProposal, onProcess
           <small>Ngữ cảnh: {versionLabel(state, entry.versionId ?? null)}</small>
           <ProposalMessage proposal={entry.proposal} state={state} busy={busy} onApplyProposal={onApplyProposal}
             onProcess={onProcess} versionId={entry.versionId ?? null} />
+        </>}
+        {entry.kind === "notice" && <>
+          <span className="chat-speaker">AI tư vấn</span>
+          <small>Ngữ cảnh: {versionLabel(state, entry.versionId ?? null)}</small>
+          <NoticeMessage entry={entry} />
         </>}
         {entry.kind === "applied" && <>
           <p className="chat-event-label"><Check size={14} /> Đã áp dụng đề xuất vào cấu hình · Chưa xử lý ảnh</p>

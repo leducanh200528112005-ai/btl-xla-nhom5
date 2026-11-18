@@ -8,7 +8,7 @@
 
 """Strict API schemas. Catalog validation remains centralized in ``catalog``."""
 
-from typing import Annotated, Literal
+from typing import Annotated, Any, Literal
 from pydantic import (
     BaseModel,
     ConfigDict,
@@ -174,15 +174,28 @@ class AdvisedStep(ProcessingStep):
     reason: Annotated[StrictStr, Field(min_length=1, max_length=2000)]
 
 
+AdviceDecision = Literal["advise", "answer", "unsupported", "off_topic"]
+
+
+class AdvisorDecision(StrictModel):
+    """Raw provider decision; steps stay unvalidated until the decision is advise."""
+
+    decision: AdviceDecision
+    analysis: Annotated[StrictStr, Field(max_length=8000)] = ""
+    steps: list[Any] | None = None
+
+
 class AdviceResponse(StrictModel):
+    decision: AdviceDecision
     analysis: Annotated[StrictStr, Field(min_length=1, max_length=8000)]
     steps: Annotated[list[AdvisedStep], Field(max_length=8)]
 
-    @field_validator("steps")
-    @classmethod
-    def validate_proposal(cls, steps: list[AdvisedStep]) -> list[AdvisedStep]:
-        _validate_steps(steps)
-        return steps
+    @model_validator(mode="after")
+    def validate_decision(self) -> "AdviceResponse":
+        if self.decision != "advise" and self.steps:
+            raise ValueError("only advise responses may include steps")
+        _validate_steps(self.steps)
+        return self
 
 
 class ProcessResultResponse(StrictModel):

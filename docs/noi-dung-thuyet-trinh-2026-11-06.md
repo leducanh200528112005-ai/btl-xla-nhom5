@@ -2,7 +2,7 @@
 
 Tài liệu dùng để chuẩn bị slide, tập lời nói, mở code giải thích và demo trực tiếp. Nội dung mô tả mã nguồn hiện tại trong `backend/` và `frontend/`. Thời lượng gợi ý: 15–20 phút trình bày và 5 phút demo; nếu ít thời gian, dùng phần 1 rồi chọn nội dung ở các phần sau.
 
-Lưu ý phạm vi: mã nguồn đã ghép đủ tám nhóm công cụ, tương ứng chín thuật toán vì khử nhiễu có hai phương pháp. AI tư vấn vẫn chưa triển khai. README và hợp đồng API còn một số mô tả phạm vi cũ chỉ gồm ba công cụ; cần thống nhất tài liệu trước khi tuyên bố nghiệm thu toàn bộ. Tài liệu này không thay đổi hợp đồng.
+Lưu ý phạm vi: mã nguồn đã ghép đủ tám nhóm công cụ, tương ứng chín thuật toán vì khử nhiễu có hai phương pháp. AI tư vấn đã có MVP dùng provider vision và trả `decision` (`advise`/`answer`/`unsupported`/`off_topic`); xem `backend/AI-ADVISOR.md`. README và hợp đồng API đã được cập nhật theo phạm vi tám nhóm. Tài liệu này không thay đổi hợp đồng.
 
 ## 1. Dàn ý để đưa vào slide
 
@@ -530,7 +530,7 @@ Tệp tên dạng `<tên-gốc>-ket-qua.png`. Dữ liệu PNG tải về là cù
 
 ### 13.7. AI tư vấn
 
-Tab có giao diện và request API nhưng backend hiện trả `501 NOT_IMPLEMENTED`. Không dùng tab này để trình diễn lời khuyên AI đã hoạt động. Cần phân biệt nó với mô hình ECCV16: **tô màu AI đã chạy**, **AI tư vấn chưa chạy**.
+Tab có giao diện hội thoại và gọi `POST /api/advise`. Backend trả một trong bốn `decision`: `advise` (đề xuất cấu hình, có nút áp dụng), `answer` (trả lời về ảnh, không thông số), `unsupported` (yêu cầu sửa nhưng thiếu công cụ) hoặc `off_topic` (câu từ chối cố định). Chỉ `advise` có steps và không tự chạy process. Cần phân biệt với mô hình ECCV16: **tô màu AI đã chạy**, **AI tư vấn chạy qua provider vision độc lập**.
 
 ## 14. API và cách giải thích payload
 
@@ -543,7 +543,7 @@ Tab có giao diện và request API nhưng backend hiện trả `501 NOT_IMPLEME
 | `POST /api/process` | Thực thi cấu hình trên ảnh gốc và lưu kết quả |
 | `GET /api/results/{result_id}` | Hiển thị PNG kết quả |
 | `GET /api/download/{result_id}` | Tải PNG kết quả |
-| `POST /api/advise` | Điểm tích hợp AI tư vấn, hiện trả 501 |
+| `POST /api/advise` | AI tư vấn: trả decision/đề xuất, không tự xử lý |
 
 Ví dụ payload để mở DevTools giải thích, UUID dưới đây chỉ minh họa cấu trúc; khi chạy phải dùng ID thật từ upload:
 
@@ -651,9 +651,9 @@ Không. Bộ phát hiện hiện dùng morphology, threshold, cấu trúc địn
 
 Không. Chúng thay đổi cấu hình frontend và bỏ liên kết kết quả hiện tại trong state khi cấu hình thay đổi. Bytes ảnh gốc được lưu riêng, không ghi đè.
 
-**Có dùng AI không, tại sao tab AI chưa hoạt động?**
+**Có dùng AI không, tab AI hoạt động thế nào?**
 
-Có dùng mô hình ECCV16 cho tô màu. Tab AI tư vấn là tính năng khác, hiện mới có khung giao diện/API và trả 501.
+Có dùng mô hình ECCV16 cho tô màu. Tab AI tư vấn là tính năng khác, dùng provider vision độc lập và trả `decision`/đề xuất; không tự chạy process. Xem `backend/AI-ADVISOR.md`.
 
 **Đã chứng minh chất lượng đến mức nào?**
 
@@ -671,9 +671,9 @@ Trong lượt rà soát cùng cuộc trao đổi này, đã chạy:
 npm.cmd test -- --run
 ```
 
-Kết quả: **210 backend tests đạt, không skip; 26 frontend tests đạt**. Backend có một cảnh báo deprecation từ tương tác Starlette/httpx. Đây là kết quả của lượt rà soát trước khi soạn tài liệu; lượt soạn tài liệu không chỉnh code ứng dụng hoặc chạy lại lint/build/browser.
+Kết quả: **241 backend tests đạt, không skip; 52 frontend tests đạt**. Backend có một cảnh báo deprecation từ tương tác Starlette/httpx. Đây là kết quả kiểm tra hiện tại; xem thêm `backend/AI-ADVISOR.md`.
 
-Giới hạn cần trình bày đúng: chất lượng tùy ảnh và tham số; xước là heuristic; giảm vàng toàn cục; màu là dự đoán; upscale là nội suy; CPU/mỗi tiến trình một request xử lý; kho tạm TTL 24 giờ; AI tư vấn chưa triển khai; tài liệu phạm vi cần đồng bộ.
+Giới hạn cần trình bày đúng: chất lượng tùy ảnh và tham số; xước là heuristic; giảm vàng toàn cục; màu là dự đoán; upscale là nội suy; CPU/mỗi tiến trình một request xử lý; kho tạm TTL 24 giờ; AI tư vấn phụ thuộc provider/key, không tự chạy process; tài liệu phạm vi đã đồng bộ.
 
 **Lời kết gợi ý:**
 

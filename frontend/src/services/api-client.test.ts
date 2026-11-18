@@ -51,3 +51,35 @@ describe("apiClient errors", () => {
     expect(apiClient.imageUrl("/api/images/id")).toBe("http://127.0.0.1:8000/api/images/id");
   });
 });
+
+describe("apiClient advise contract", () => {
+  const request = { image_id: "id", prompt: "Ảnh này bị gì?", steps: [], current_result_id: null };
+
+  it("accepts image answers and off-topic notices with empty steps", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(
+      Response.json({ decision: "answer", analysis: "Ảnh hơi mờ.", steps: [] }),
+    ));
+    await expect(apiClient.advise(request)).resolves.toMatchObject({ decision: "answer" });
+  });
+
+  it("rejects notices that try to include processing steps", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(
+      Response.json({
+        decision: "off_topic",
+        analysis: "Ngoài phạm vi.",
+        steps: [{ algorithm: "adjust_gamma", params: { gamma: 1.2 }, reason: "x" }],
+      }),
+    ));
+    await expect(apiClient.advise(request)).rejects.toMatchObject({
+      name: "ApiError",
+      code: "INVALID_RESPONSE",
+    });
+  });
+
+  it("rejects unknown decisions", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(
+      Response.json({ decision: "chat", analysis: "x", steps: [] }),
+    ));
+    await expect(apiClient.advise(request)).rejects.toMatchObject({ code: "INVALID_RESPONSE" });
+  });
+});

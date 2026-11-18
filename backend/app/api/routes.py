@@ -3,7 +3,8 @@
 # upload(): FormData chỉ có file -> ImageAsset; image_id dùng cho process/advise.
 # get_original(): trả bytes gốc qua URL tương đối; FE nối URL bằng apiClient.imageUrl().
 # process(): chạy ba thuật toán người 3/4 và trả ProcessResult; bước khác trả 501.
-# advise(): phân tích ảnh gốc qua provider cấu hình, trả đề xuất đã validate.
+# advise(): phân tích ảnh gốc qua provider cấu hình, trả decision đã validate
+# (advise/answer/unsupported/off_topic); chỉ advise mang steps cấu hình.
 # download(): trả PNG đã xử lý qua result_id thật, không dùng image_id.
 # Khi tích hợp thật cần trả ProcessResult đúng contract trước khi FE có thể hiện
 # kết quả/so sánh/tải xuống; tuyệt đối không trả ảnh gốc như ảnh đã khôi phục.
