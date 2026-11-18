@@ -8,7 +8,6 @@ import {
   RotateCcw,
   SlidersHorizontal,
   Sparkles,
-  Undo2,
   Wifi,
   WifiOff,
 } from "lucide-react";
@@ -25,6 +24,7 @@ import { conversationHistory } from "@/features/advisor/conversation-context";
 import { Canvas, type CanvasView } from "@/features/editor/Canvas";
 import {
   editorReducer,
+  getActiveVersion,
   initialEditorState,
 } from "@/features/editor/editor-state";
 import {
@@ -41,7 +41,7 @@ type Operation = "connection" | "upload" | "process" | "advise" | "download";
 
 export function Editor() {
   const [state, dispatch] = useReducer(editorReducer, initialEditorState);
-  const [view, setView] = useState<CanvasView>("original");
+  const [view, setView] = useState<CanvasView>("single");
   const [selectionError, setSelectionError] = useState<string | null>(null);
   const [downloadError, setDownloadError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -171,7 +171,7 @@ export function Editor() {
       const generation = ++generationRef.current;
       const previewUrl = URL.createObjectURL(validatedImage.previewBlob);
       previewUrlRef.current = previewUrl;
-      setView("original");
+      setView("single");
       setDownloadError(null);
       dispatch({
         type: "FILE_SELECTED",
@@ -229,7 +229,7 @@ export function Editor() {
     requests.current.process = controller;
     const generation = state.generation;
     dispatch({ type: "PROCESS_STARTED", generation, steps });
-    setView("original");
+    setView("single");
 
     try {
       const result = await apiClient.process(
@@ -244,7 +244,7 @@ export function Editor() {
         });
       }
       dispatch({ type: "PROCESS_SUCCEEDED", generation, result });
-      setView("result");
+      setView("single");
     } catch (error) {
       if (controller.signal.aborted || generationRef.current !== generation) return;
       dispatch({ type: "PROCESS_FAILED", generation, error: asApiError(error) });
@@ -284,7 +284,7 @@ export function Editor() {
           image_id: state.uploaded.image_id,
           prompt: prompt.trim(),
           steps,
-          current_result_id: state.latestResult?.result.result_id ?? null,
+          current_result_id: getActiveVersion(state)?.result.result_id ?? null,
           history: conversationHistory(state.chat),
         },
         controller.signal,
@@ -386,8 +386,8 @@ export function Editor() {
     void connectToBackend();
   }, [connectToBackend]);
 
-  const canUndo = state.historyIndex > 0;
-  const resultUrl = state.result ? apiClient.imageUrl(state.result.url) : null;
+  const activeResult = getActiveVersion(state)?.result ?? null;
+  const resultUrl = activeResult ? apiClient.imageUrl(activeResult.url) : null;
   const busy = state.processStatus === "loading" || state.adviseStatus === "loading";
   const fileStatus = state.uploadStatus === "uploaded"
     ? "Đã tải lên backend"
@@ -453,8 +453,8 @@ export function Editor() {
           <button
             type="button"
             className="primary-button header-download-button"
-            disabled={!state.result}
-            onClick={() => state.result && void downloadResult(state.result)}
+            disabled={!activeResult}
+            onClick={() => activeResult && void downloadResult(activeResult)}
             aria-label="Tải kết quả đã xử lý"
           ><Download size={14} /> <span>Tải kết quả</span></button>
         </div>
@@ -465,8 +465,16 @@ export function Editor() {
           state={state}
           resultUrl={resultUrl}
           uploadError={state.uploadError?.message ?? null}
-          view={state.result ? view : "original"}
-          onViewChange={setView}
+           view={view}
+           onViewChange={setView}
+           onSelectVersion={(versionId) => {
+             dispatch({ type: "SELECT_VERSION", versionId });
+             setView("single");
+             setDownloadError(null);
+           }}
+           onCompareVersion={(side, versionId) => dispatch({ type: "SET_COMPARE_VERSION", side, versionId })}
+           onSwapCompare={() => dispatch({ type: "SWAP_COMPARE" })}
+           onUndo={() => dispatch({ type: "UNDO_CONFIG" })}
           selectionError={selectionError}
           downloadError={downloadError}
           onChooseFile={() => fileInputRef.current?.click()}
@@ -520,36 +528,12 @@ export function Editor() {
               busy={busy}
               onAdvise={(prompt) => void requestAdvice(prompt)}
               onApplyProposal={applyProposal}
+              onProcess={() => void processImage()}
             />
           </div>
         </aside>
       </div>
 
-      <footer className="app-footer">
-        <div className="footer-image-metadata">
-          <span className="footer-image-icon"><ImagePlus size={14} /></span>
-          <span className="footer-file-status">{fileStatus}</span>
-          {state.file && (
-            <span className="footer-dimensions">
-              {state.result && view !== "original"
-                ? `${state.result.width} × ${state.result.height} px · Kết quả`
-                : state.uploaded
-                ? `${state.uploaded.width} × ${state.uploaded.height} px`
-                : state.previewWidth && state.previewHeight
-                  ? `${state.previewWidth} × ${state.previewHeight} px`
-                  : "Ảnh xem trước"}
-            </span>
-          )}
-        </div>
-        <div className="footer-disclaimer"><span className="status-dot" /> 8 công cụ phục hồi · Phóng ảnh 2×/4×</div>
-        <button
-          type="button"
-          className="footer-undo-button"
-          disabled={!canUndo || state.uploadStatus !== "uploaded" || busy}
-          onClick={() => dispatch({ type: "UNDO_CONFIG" })}
-          title="Hoàn tác thay đổi cấu hình gần nhất"
-        ><Undo2 size={14} /> Hoàn tác</button>
-      </footer>
     </main>
   );
 }

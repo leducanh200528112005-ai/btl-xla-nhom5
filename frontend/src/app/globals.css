@@ -50,6 +50,11 @@ button {
   color: inherit;
 }
 
+button:not(:disabled),
+summary {
+  cursor: pointer;
+}
+
 button:focus-visible,
 input:focus-visible,
 textarea:focus-visible,
@@ -348,6 +353,253 @@ select:disabled {
   gap: 12px;
   padding: 18px 20px 12px;
   background: #111517;
+  overflow-y: auto;
+}
+
+.comparison-selectors {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  flex: 0 0 auto;
+}
+
+.comparison-picker-button {
+  min-width: 0;
+  min-height: 32px;
+  font-size: 11px;
+}
+
+.comparison-picker-button span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.version-picker-dialog {
+  position: fixed;
+  inset: 0;
+  width: min(720px, calc(100vw - 32px));
+  max-width: calc(100vw - 32px);
+  max-height: min(640px, 80dvh);
+  margin: auto;
+  padding: 18px;
+  overflow-y: auto;
+  color: var(--text);
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  box-shadow: 0 24px 80px #0009;
+}
+
+.version-picker-dialog::backdrop {
+  background: #0009;
+  backdrop-filter: blur(3px);
+}
+
+.version-picker-dialog h2 {
+  margin: 0;
+  font-size: 15px;
+}
+
+.version-picker-dialog .version-list {
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+}
+
+.version-picker-dialog .version-card img {
+  height: 112px;
+}
+
+.version-picker-dialog .version-card {
+  padding: 10px;
+  gap: 6px;
+}
+
+.comparison-selectors > span,
+.version-history-heading > span {
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.version-history {
+  position: absolute;
+  z-index: 10;
+  top: 66px;
+  right: 20px;
+  width: min(580px, calc(100% - 40px));
+  min-width: 0;
+  max-height: min(440px, 65dvh);
+  overflow: auto;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 12px;
+  background: var(--panel);
+  box-shadow: 0 12px 40px #0008;
+}
+
+.version-history-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px 16px;
+  font-size: 12px;
+  margin-bottom: 8px;
+}
+
+.version-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  align-items: flex-start;
+  gap: 8px;
+  padding-bottom: 6px;
+}
+
+.version-item,
+.version-list > .version-card {
+  min-width: 0;
+}
+
+.version-card {
+  display: flex;
+  width: 100%;
+  flex-direction: column;
+  gap: 4px;
+  padding: 8px;
+  text-align: left;
+  color: var(--text);
+  background: #181d20;
+  border: 1px solid var(--border-soft);
+  border-radius: 8px;
+  font-size: 12px;
+  cursor: pointer;
+  transition: background-color 130ms ease, border-color 130ms ease, box-shadow 130ms ease, transform 130ms ease;
+}
+
+.version-card:hover:not(:disabled) {
+  border-color: #48575e;
+  background: #20272b;
+  box-shadow: 0 6px 16px #0007;
+  transform: translateY(-1px);
+}
+
+.version-card:active:not(:disabled) {
+  background: #1a2124;
+  box-shadow: none;
+  transform: translateY(0);
+}
+
+.version-card:disabled {
+  cursor: not-allowed;
+  opacity: 0.62;
+}
+
+.version-card[aria-pressed="true"] {
+  border-color: var(--accent);
+  background: #1b302e;
+}
+
+.version-card[aria-pressed="true"]:hover:not(:disabled) {
+  border-color: var(--accent-strong);
+  background: #203a37;
+}
+
+.version-card img {
+  width: 100%;
+  height: 56px;
+  object-fit: contain;
+}
+
+.version-card span,
+.version-config {
+  color: var(--muted);
+  font-size: 10px;
+}
+
+.version-card span {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.version-config {
+  width: 100%;
+  padding: 6px;
+  overflow-wrap: anywhere;
+}
+
+.version-config > summary {
+  margin: -3px -6px;
+  padding: 3px 6px;
+  border-radius: 5px;
+  color: var(--muted-strong);
+  cursor: pointer;
+  transition: background-color 130ms ease, color 130ms ease;
+}
+
+.version-config > summary:hover {
+  color: var(--text);
+  background: #242c30;
+}
+
+.version-config[open] > summary {
+  color: var(--text);
+}
+
+.version-config ul {
+  padding-left: 14px;
+}
+
+.version-config li > span,
+.advisor-version-context > span {
+  display: block;
+  margin-top: 4px;
+}
+
+.advisor-version-context {
+  margin: 8px 0 0;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.canvas-draft-note {
+  margin: 0;
+  color: var(--warning);
+  font-size: 11px;
+}
+
+.canvas-toolbar-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.version-history-toggle {
+  min-height: 30px;
+  padding: 0 9px;
+  font-size: 11px;
+}
+
+.version-history-toggle.is-selected {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.version-count {
+  color: var(--muted);
+  font-size: 10px;
+}
+
+.version-history-hint {
+  color: var(--muted);
+  font-size: 11px;
+  margin: 0 0 12px;
+}
+
+.canvas-undo {
+  flex-shrink: 0;
 }
 
 .canvas-toolbar {
@@ -480,7 +732,7 @@ select:disabled {
 .canvas-stage {
   position: relative;
   display: grid;
-  min-height: 220px;
+  min-height: clamp(140px, 25vh, 220px);
   flex: 1 1 0;
   overflow: hidden;
   place-items: center;
@@ -629,7 +881,8 @@ select:disabled {
   bottom: 0;
   width: 1px;
   background: rgba(237, 243, 245, 0.8);
-  pointer-events: none;
+  cursor: ew-resize;
+  touch-action: none;
   box-shadow: 0 0 0 1px rgba(16, 19, 21, 0.35);
 }
 
@@ -1737,10 +1990,80 @@ select:disabled {
 }
 
 .chat-entry summary { cursor: pointer; color: var(--muted-strong); }
-.chat-composer { display: block; }
-.chat-composer .advisor-prompt-label { margin-top: 8px; }
-.chat-composer .advisor-prompt { min-height: 72px; max-height: 140px; width: 100%; }
-.chat-composer .advisor-submit { margin-top: 8px; }
+.chat-composer {
+  flex: 0 0 auto;
+  padding: 10px 12px 12px;
+}
+
+.chat-input-box {
+  padding: 10px;
+  border: 1px solid #384247;
+  border-radius: 12px;
+  background: #22282b;
+}
+
+.chat-input-box:focus-within {
+  border-color: var(--accent);
+}
+
+.chat-composer .advisor-prompt {
+  width: 100%;
+  min-height: 50px;
+  max-height: 140px;
+  padding: 0 2px;
+  border: 0;
+  border-radius: 0;
+  outline: none;
+  box-shadow: none;
+  background: transparent;
+  resize: vertical;
+  font-size: 12px;
+}
+
+.chat-composer .advisor-prompt:hover:not(:disabled),
+.chat-composer .advisor-prompt:focus {
+  border: 0;
+  outline: none;
+  box-shadow: none;
+  background: transparent;
+}
+
+.chat-input-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 6px;
+}
+
+.chat-input-context {
+  overflow: hidden;
+  min-width: 0;
+  flex: 1;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.draft-context-mark {
+  margin-left: 3px;
+  color: var(--warning);
+}
+
+.chat-input-counter {
+  color: var(--muted);
+  font-size: 10px;
+}
+
+.chat-composer .advisor-submit {
+  width: 30px;
+  min-width: 30px;
+  min-height: 30px;
+  height: 30px;
+  padding: 0;
+  margin: 0;
+  border-radius: 8px;
+}
 
 .app-footer {
   position: relative;

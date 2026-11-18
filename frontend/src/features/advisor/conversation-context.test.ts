@@ -3,6 +3,17 @@ import { conversationHistory } from "./conversation-context";
 import type { ChatEntry } from "@/features/editor/editor-state";
 
 describe("conversationHistory", () => {
+  it("labels completed AI turns with their source version without adding image URLs", () => {
+    const history = conversationHistory([
+      { id: "user", kind: "user", text: "Giảm vàng", status: "succeeded", error: null, versionId: "older-result" },
+      { id: "reply", kind: "assistant", proposal: { analysis: "Giảm nhẹ", steps: [] }, versionId: "older-result" },
+      { id: "original", kind: "user", text: "Bắt đầu lại", status: "succeeded", error: null, versionId: null },
+    ]);
+    expect(history[0].text).toBe("[Ngữ cảnh: older-result] Giảm vàng");
+    expect(history[1].text).toBe("[Ngữ cảnh: older-result] Giảm nhẹ");
+    expect(history[2].text).toBe("[Ngữ cảnh: ảnh gốc] Bắt đầu lại");
+  });
+
   it("omits pending/failed turns and bounds history to twenty events", () => {
     const chat: ChatEntry[] = Array.from({ length: 25 }, (_, i) => ({
       id: `${i}`, kind: "user", text: `turn ${i}`, status: "succeeded", error: null,

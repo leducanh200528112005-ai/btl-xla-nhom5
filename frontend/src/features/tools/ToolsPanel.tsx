@@ -11,7 +11,6 @@ import {
   Palette,
   RotateCcw,
   ScanLine,
-  SlidersHorizontal,
   Sparkles,
   Sun,
   Waves,
@@ -61,17 +60,6 @@ export function ToolsPanel({ state, dispatch, busy, onProcess }: ToolsPanelProps
 
   return (
     <div className="tools-panel">
-      <div className="sidebar-intro">
-        <div className="sidebar-title-row">
-          <span className="sidebar-heading-icon"><SlidersHorizontal size={16} /></span>
-          <div>
-            <h2>Công cụ phục hồi</h2>
-            <p>Chọn tác vụ và tinh chỉnh tham số</p>
-          </div>
-        </div>
-        <span className="small-status-label">XỬ LÝ ẢNH TRÊN MÁY CHỦ</span>
-      </div>
-
       {state.connectionStatus === "offline" && (
         <div className="sidebar-inline-notice" role="status">
           <span>{state.connectionError?.message ?? "Không tải được danh mục."}</span>
@@ -152,7 +140,6 @@ export function ToolsPanel({ state, dispatch, busy, onProcess }: ToolsPanelProps
       </div>
 
       <div className="sidebar-actions">
-        <p className="no-preview-note">Thay đổi thông số không làm biến đổi ảnh xem trước.</p>
         {state.processStatus === "loading" && (
           <div className="request-message" role="status" aria-live="polite">
             <LoaderCircle size={14} className="spin" /> Đang gửi yêu cầu xử lý…
@@ -187,7 +174,6 @@ export function ToolsPanel({ state, dispatch, busy, onProcess }: ToolsPanelProps
             {state.processStatus === "loading" ? "Đang xử lý…" : "Xử lý ảnh"}
           </button>
         </div>
-        <p className="stub-footnote">Bật công cụ phù hợp với ảnh. Tô màu có thể thay đổi màu gốc; giảm vết xước có thể nhận nhầm chi tiết.</p>
       </div>
     </div>
   );

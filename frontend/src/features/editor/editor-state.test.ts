@@ -38,6 +38,59 @@ const asset: ImageAsset = {
 };
 
 describe("editorReducer", () => {
+  it("stores independent version configurations and restores an earlier version without processing", () => {
+    let state = editorReducer(initialEditorState, { type: "API_READY", catalog });
+    state = editorReducer(state, { type: "SET_ENABLED", toolId: "brightness", enabled: true });
+    state = editorReducer(state, { type: "SET_PARAM", algorithmId: "adjust_gamma", key: "gamma", value: 1.2 });
+    state = editorReducer(state, { type: "PROCESS_STARTED", generation: 0,
+      steps: [{ algorithm: "adjust_gamma", params: { gamma: 1.2 } }] });
+    state = editorReducer(state, { type: "PROCESS_SUCCEEDED", generation: 0,
+      result: { ...asset, result_id: "one" } });
+    state = editorReducer(state, { type: "SET_PARAM", algorithmId: "adjust_gamma", key: "gamma", value: 1.8 });
+    state = editorReducer(state, { type: "PROCESS_STARTED", generation: 0,
+      steps: [{ algorithm: "adjust_gamma", params: { gamma: 1.8 } }] });
+    state = editorReducer(state, { type: "PROCESS_SUCCEEDED", generation: 0,
+      result: { ...asset, result_id: "two" } });
+    expect(state.versions).toHaveLength(2);
+    expect(state.versions[0].config.params.adjust_gamma.gamma).toBe(1.2);
+    state = editorReducer(state, { type: "SELECT_VERSION", versionId: "one" });
+    expect(state.config.params.adjust_gamma.gamma).toBe(1.2);
+    expect(state.activeVersionId).toBe("one");
+    expect(state.result?.result_id).toBe("one");
+    expect(state.processStatus).toBe("idle");
+    state = editorReducer(state, { type: "SET_PARAM", algorithmId: "adjust_gamma", key: "gamma", value: 2 });
+    expect(state.versions[0].config.params.adjust_gamma.gamma).toBe(1.2);
+    state = editorReducer(state, { type: "SELECT_VERSION", versionId: null });
+    expect(state.config.enabled.brightness).toBe(false);
+    expect(state.versions).toHaveLength(2);
+    state = editorReducer(state, { type: "FILE_SELECTED", file: new File(["new"], "new.png"),
+      previewUrl: "blob:new", width: 1, height: 1, generation: 1 });
+    expect(state.versions).toEqual([]);
+    expect(state.activeVersionId).toBeNull();
+    expect(state.compareLeftId).toBeNull();
+    expect(state.compareRightId).toBeNull();
+  });
+
+  it("keeps comparison choices independent of editing and binds a pending AI response to its original version", () => {
+    let state = editorReducer(initialEditorState, { type: "API_READY", catalog });
+    state = editorReducer(state, { type: "PROCESS_STARTED", generation: 0, steps: [] });
+    state = editorReducer(state, { type: "PROCESS_SUCCEEDED", generation: 0,
+      result: { ...asset, result_id: "one" } });
+    const config = state.config;
+    state = editorReducer(state, { type: "SET_COMPARE_VERSION", side: "left", versionId: "one" });
+    state = editorReducer(state, { type: "SET_COMPARE_VERSION", side: "right", versionId: null });
+    state = editorReducer(state, { type: "SWAP_COMPARE" });
+    expect(state.activeVersionId).toBe("one");
+    expect(state.config).toBe(config);
+    expect(state.compareLeftId).toBeNull();
+    expect(state.compareRightId).toBe("one");
+    state = editorReducer(state, { type: "ADVISE_STARTED", generation: 0, prompt: "test", requestId: "request" });
+    state = editorReducer(state, { type: "SELECT_VERSION", versionId: null });
+    state = editorReducer(state, { type: "ADVISE_SUCCEEDED", generation: 0, proposal: { analysis: "reply", steps: [] } });
+    expect(state.chat.at(-1)).toMatchObject({ kind: "assistant", versionId: "one" });
+    expect(state.activeVersionId).toBeNull();
+  });
+
   it("retains immutable manual result snapshots after edits, undo, reset and failed processing", () => {
     let state = editorReducer(initialEditorState, { type: "API_READY", catalog });
     const steps = [{ algorithm: "adjust_gamma", params: { gamma: 1.2 } }];

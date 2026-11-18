@@ -29,9 +29,14 @@ export type ResultSnapshot = {
   source: "manual" | "ai";
 };
 
+export type SavedVersion = ResultSnapshot & {
+  config: EditorConfig;
+  createdAt: number;
+};
+
 export type ChatEntry =
-  | { id: string; kind: "user"; text: string; status: "loading" | "succeeded" | "error"; error: string | null }
-  | { id: string; kind: "assistant"; proposal: AdviceResponse }
+  | { id: string; kind: "user"; text: string; status: "loading" | "succeeded" | "error"; error: string | null; versionId?: string | null }
+  | { id: string; kind: "assistant"; proposal: AdviceResponse; versionId?: string | null }
   | { id: string; kind: "applied"; steps: ProcessingStep[] }
   | ({ id: string; kind: "processed" } & ResultSnapshot);
 
@@ -62,7 +67,12 @@ export type EditorState = {
   chat: ChatEntry[];
   pendingAdviceId: string | null;
   latestResult: ResultSnapshot | null;
-  pendingProcessing: Omit<ResultSnapshot, "result"> | null;
+  versions: SavedVersion[];
+  activeVersionId: string | null;
+  compareLeftId: string | null;
+  compareRightId: string | null;
+  pendingAdviceVersionId: string | null;
+  pendingProcessing: (Omit<ResultSnapshot, "result"> & { config: EditorConfig }) | null;
   configSource: "manual" | "ai";
 };
 
@@ -83,6 +93,9 @@ export type EditorAction =
   | { type: "UPLOAD_FAILED"; generation: number; error: ApiError }
   | { type: "SET_TAB"; tab: "tools" | "advisor" }
   | { type: "SET_ZOOM"; zoom: number }
+  | { type: "SELECT_VERSION"; versionId: string | null }
+  | { type: "SET_COMPARE_VERSION"; side: "left" | "right"; versionId: string | null }
+  | { type: "SWAP_COMPARE" }
   | { type: "SET_ENABLED"; toolId: ToolId; enabled: boolean }
   | { type: "SELECT_ALGORITHM"; toolId: ToolId; algorithmId: string }
   | { type: "SET_PARAM"; algorithmId: string; key: string; value: number }
@@ -125,9 +138,24 @@ export const initialEditorState: EditorState = {
   chat: [],
   pendingAdviceId: null,
   latestResult: null,
+  versions: [],
+  activeVersionId: null,
+  compareLeftId: null,
+  compareRightId: null,
+  pendingAdviceVersionId: null,
   pendingProcessing: null,
   configSource: "manual",
 };
+
+export function getActiveVersion(state: EditorState): SavedVersion | null {
+  return state.versions.find((version) => version.result.result_id === state.activeVersionId) ?? null;
+}
+
+export function versionLabel(state: EditorState, id: string | null): string {
+  if (id === null) return "Ảnh gốc";
+  const index = state.versions.findIndex((version) => version.result.result_id === id);
+  return index < 0 ? "Phiên bản không còn trong phiên" : `Phiên bản ${index + 1}`;
+}
 
 function copySteps(steps: ProcessingStep[]): ProcessingStep[] {
   return steps.map((step) => ({ algorithm: step.algorithm, params: { ...step.params } }));
@@ -210,6 +238,11 @@ export function editorReducer(state: EditorState, action: EditorAction): EditorS
         chat: [],
         pendingAdviceId: null,
         latestResult: null,
+        versions: [],
+        activeVersionId: null,
+        compareLeftId: null,
+        compareRightId: null,
+        pendingAdviceVersionId: null,
         pendingProcessing: null,
         configSource: "manual",
       };
@@ -235,6 +268,28 @@ export function editorReducer(state: EditorState, action: EditorAction): EditorS
       return { ...state, activeTab: action.tab };
     case "SET_ZOOM":
       return { ...state, zoom: Math.max(0.25, Math.min(3, action.zoom)) };
+    case "SELECT_VERSION": {
+      if (state.processStatus === "loading") return state;
+      const version = state.versions.find((item) => item.result.result_id === action.versionId);
+      if (action.versionId !== null && !version) return state;
+      const config = version ? version.config : createDefaultConfig(state.catalog ?? []);
+      return {
+        ...appendHistory(state, config),
+        activeVersionId: action.versionId,
+        result: version?.result ?? null,
+        processStatus: "idle",
+        processError: null,
+        configSource: version?.source ?? "manual",
+        draftSyncVersion: state.draftSyncVersion + 1,
+      };
+    }
+    case "SET_COMPARE_VERSION":
+      if (action.versionId !== null && !state.versions.some((item) => item.result.result_id === action.versionId)) return state;
+      return action.side === "left"
+        ? { ...state, compareLeftId: action.versionId }
+        : { ...state, compareRightId: action.versionId };
+    case "SWAP_COMPARE":
+      return { ...state, compareLeftId: state.compareRightId, compareRightId: state.compareLeftId };
     case "SET_ENABLED": {
       const config = cloneConfig(state.config);
       config.enabled[action.toolId] = action.enabled;
@@ -285,7 +340,7 @@ export function editorReducer(state: EditorState, action: EditorAction): EditorS
         ? state
         : {
             ...state, processStatus: "loading", processError: null, result: null,
-            pendingProcessing: { steps: copySteps(action.steps), source: state.configSource },
+            pendingProcessing: { steps: copySteps(action.steps), source: state.configSource, config: cloneConfig(state.config) },
           };
     case "PROCESS_SUCCEEDED":
       return action.generation !== state.generation
@@ -295,6 +350,11 @@ export function editorReducer(state: EditorState, action: EditorAction): EditorS
             processStatus: "succeeded",
             processError: null,
             result: action.result,
+            versions: state.pendingProcessing
+              ? [...state.versions, { result: { ...action.result }, ...state.pendingProcessing, createdAt: Date.now() }]
+              : state.versions,
+            activeVersionId: state.pendingProcessing ? action.result.result_id : state.activeVersionId,
+            compareRightId: state.pendingProcessing ? action.result.result_id : state.compareRightId,
             latestResult: state.pendingProcessing
               ? { result: action.result, ...state.pendingProcessing } : state.latestResult,
             chat: state.pendingProcessing
@@ -320,8 +380,9 @@ export function editorReducer(state: EditorState, action: EditorAction): EditorS
         : {
             ...state, adviseStatus: "loading", adviseError: null,
             pendingAdviceId: action.requestId,
+            pendingAdviceVersionId: state.activeVersionId,
             chat: appendChat(state.chat, {
-              id: action.requestId, kind: "user", text: action.prompt, status: "loading", error: null,
+              id: action.requestId, kind: "user", text: action.prompt, status: "loading", error: null, versionId: state.activeVersionId,
             }),
           };
     case "ADVISE_SUCCEEDED":
@@ -335,7 +396,7 @@ export function editorReducer(state: EditorState, action: EditorAction): EditorS
             chat: appendChat(state.chat.map((entry) =>
               entry.kind === "user" && entry.id === state.pendingAdviceId
                 ? { ...entry, status: "succeeded" as const } : entry), {
-              id: `${state.pendingAdviceId}-reply`, kind: "assistant", proposal: action.proposal,
+              id: `${state.pendingAdviceId}-reply`, kind: "assistant", proposal: action.proposal, versionId: state.pendingAdviceVersionId,
             }),
             pendingAdviceId: null,
           };

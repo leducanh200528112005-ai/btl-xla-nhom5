@@ -1,16 +1,20 @@
 import type { ConversationEvent } from "@/types/api";
 import type { ChatEntry } from "@/features/editor/editor-state";
 
+function withVersion(text: string, versionId: string | null | undefined): string {
+  return (versionId === undefined ? text : `[Ngữ cảnh: ${versionId ?? "ảnh gốc"}] ${text}`).slice(0, 8000);
+}
+
 /** Images are referenced separately; only bounded, completed context goes on the wire. */
 export function conversationHistory(chat: ChatEntry[]): ConversationEvent[] {
   return chat.flatMap((entry): ConversationEvent[] => {
     switch (entry.kind) {
       case "user":
         return entry.status === "succeeded"
-          ? [{ kind: "user", text: entry.text, steps: [] }] : [];
+          ? [{ kind: "user", text: withVersion(entry.text, entry.versionId), steps: [] }] : [];
       case "assistant":
         return [{
-          kind: "assistant", text: entry.proposal.analysis,
+          kind: "assistant", text: withVersion(entry.proposal.analysis, entry.versionId),
           steps: entry.proposal.steps.map(({ algorithm, params }) => ({ algorithm, params })),
         }];
       case "applied":
@@ -18,7 +22,7 @@ export function conversationHistory(chat: ChatEntry[]): ConversationEvent[] {
       case "processed":
         return [{
           kind: "processed",
-          text: `Đã xử lý thành công: ${entry.result.width} × ${entry.result.height} px.`,
+          text: `Đã xử lý thành công (${entry.result.result_id}): ${entry.result.width} × ${entry.result.height} px.`,
           steps: entry.steps, source: entry.source,
         }];
     }

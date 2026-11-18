@@ -188,7 +188,9 @@ Request:
 - `prompt`: trim, 1..2000 ký tự.
 - `steps`: cùng định nghĩa, 0..8 phần tử, có thể gửi cấu hình hiện tại.
 - `current_result_id`: UUID4 hoặc null, default null. Tham chiếu kết quả thành công
-  gần nhất kể cả do chỉnh thủ công, không nhất thiết khớp `steps` đang chọn.
+   đang được chọn để chỉnh tiếp, kể cả phiên bản cũ hoặc do chỉnh thủ công;
+   không nhất thiết khớp `steps` đang chọn. Chọn ảnh gốc gửi null. Hai lựa chọn
+   ảnh so sánh trái/phải không tác động trường này.
   Backend kiểm tra TTL/tồn tại (404) và liên kết với `image_id` (422 nếu khác ảnh).
   Cấu hình tạo kết quả lấy từ metadata backend, không tin cấu hình client khai báo.
   Kết quả legacy không có snapshot trả 422 `RESULT_CONTEXT_UNAVAILABLE`, cần xử lý lại.

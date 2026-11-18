@@ -17,6 +17,22 @@
 
 ## 2. Layout desktop
 
+> Cập nhật giao diện gọn: bỏ footer toàn trang; metadata ở thanh canvas,
+> Hoàn tác cạnh các nút xem ảnh. “Phiên bản” cạnh “Xem một ảnh / So sánh” mở
+> bảng nổi, mặc định đóng, không chiếm diện tích canvas; đóng khi chọn, Escape
+> hoặc bấm ra ngoài. Bỏ các khối intro/tiêu đề phụ của hai tab sidebar.
+> Công cụ chỉ giữ nội dung và hàng Đặt lại / Xử lý ảnh ở đáy, không chú thích
+> tĩnh phía trên/dưới hàng nút. AI dùng một ô nhập có nút gửi icon bên trong;
+> ngữ cảnh phiên bản, dấu draft và bộ đếm nằm trong cùng ô, không có văn bản
+> trên/dưới composer. Giữ label cho trình đọc màn hình và Ctrl+Enter để gửi.
+> Các mô tả footer/intro/composer cũ dưới đây đã được thay thế.
+>
+> Đối chiếu: hai góc trên của khung ảnh chỉ hiển thị tên phiên bản trái/phải,
+> cùng kiểu dáng đối xứng, không phủ badge trạng thái lên nhãn trái. Hai nút
+> chọn ảnh mở cửa sổ modal có thumbnail và cấu hình các phiên bản trong phiên,
+> thay dropdown chữ; chọn chỉ đổi bên đối chiếu, không đổi bản đang chỉnh/AI.
+> Cửa sổ hỗ trợ Escape, nút đóng và bấm nền ngoài để hủy.
+
 Editor chiếm viewport, không có thanh điều hướng marketing.
 
 ```
@@ -94,6 +110,20 @@ Footer sidebar luôn nhìn thấy, không bị cuộn mất: `Đặt lại` và 
 
 ## 6. Canvas và kết quả
 
+> Cập nhật phiên bản trong phiên: mỗi lần xử lý thành công lưu một phiên bản
+> gồm result, snapshot đầy đủ cấu hình, steps, nguồn thủ công/AI và thời điểm.
+> Chỉ lưu metadata/cấu hình trong React state; file kết quả vẫn ở backend.
+> Không localStorage/database. Đổi ảnh gốc hoặc reload xóa danh sách.
+> Chọn phiên bản nạp ảnh và cấu hình, không tự process; chỉnh tiếp tạo bản mới.
+> Ảnh đã lưu vẫn xem/tải được khi draft thay đổi; luôn báo draft chưa xử lý.
+> Canvas có “Xem một ảnh” và “So sánh”; hai ô trái/phải chọn độc lập ảnh gốc
+> hoặc bất kỳ phiên bản đã lưu, kèm đổi bên và thanh phân chia, chung zoom/pan.
+> Lựa chọn đối chiếu không thay cấu hình hoặc ngữ cảnh AI. AI gửi
+> current_result_id của phiên bản đang chỉnh (null nếu ảnh gốc), cùng draft.
+> Mỗi lượt tư vấn gắn phiên bản lúc gửi; đổi phiên bản trong lúc chờ không đổi
+> ngữ cảnh lượt đó. Chỉ áp dụng đề xuất khi đang chọn đúng phiên bản nguồn.
+> Các mô tả khóa download khi draft thay đổi bên dưới đã được thay thế.
+
 - Chỉ local preview/original khi chưa có result; nhãn `Ảnh gốc` và thông tin file.
 - Zoom +/-/fit, pan khi zoom lớn; giữ ảnh trong canvas, không cho ảnh tràn đè sidebar. Fit theo viewport và image aspect. Dùng CSS transform/DOM; không dùng canvas để reencode.
 - Nếu có UI lựa chọn `Gốc / So sánh / Kết quả`, hai lựa chọn sau disabled khi result=null. Giải thích bằng tooltip hoặc chú thích; không duplicate original thành hai nửa so sánh.
@@ -107,7 +137,10 @@ Footer sidebar luôn nhìn thấy, không bị cuộn mất: `Đặt lại` và 
 > 100 sự kiện trong bộ nhớ phiên; gửi 20 sự kiện hoàn tất gần nhất, ảnh gốc và ID
 > kết quả gần nhất. Mỗi lần xử lý thành công (kể cả chỉnh tay) lưu ảnh/cấu hình
 > cố định, độc lập slider và result hiện hành. Phân biệt đã đề xuất/áp dụng/xử lý.
-> Mỗi đề xuất có nút khớp cấu hình; lỗi ở lượt user có thử gửi lại. Đổi ảnh xóa
+> Mỗi đề xuất có nút khớp cấu hình; sau khi khớp, nút chuyển thành
+> “Đã khớp đề xuất · Xử lý ảnh” và gọi xử lý ngay trong tab AI, không tự
+> chuyển tab. Mỗi cấu hình chỉ xử lý một lần từ đề xuất: xong thì nút thành
+> “Đã xử lý · Phiên bản N” và bị khóa để không tạo bản trùng. Lỗi ở lượt user có thử gửi lại. Đổi ảnh xóa
 > timeline/snapshot và bỏ response cũ. Không có lưu phiên qua reload/database.
 > Những mô tả single-turn/501 dưới đây là lịch sử, được thay thế bởi cập nhật này.
 
@@ -115,7 +148,7 @@ Footer sidebar luôn nhìn thấy, không bị cuộn mất: `Đặt lại` và 
 - Gợi ý chữ tĩnh giải thích AI sẽ nhận xét ảnh và đề xuất thông số; không trình bày gợi ý đó như câu trả lời của AI.
 - Textarea request, counter max 2000, nút `Phân tích ảnh` cần uploaded ID và prompt không rỗng. Gửi steps hiện tại, current_result_id=null.
 - Loading rõ ràng; 501 hiển thị đúng message và giữ nội dung người dùng để sửa/gửi lại.
-- Chỗ nhận xét/steps/áp dụng chỉ render khi có proposal thật. Áp dụng về sau phải kiểm tra thuật toán/params khớp catalog, chuyển thành một history entry; không tự process.
+- Chỗ nhận xét/steps/áp dụng chỉ render khi có proposal thật. Áp dụng về sau phải kiểm tra thuật toán/params khớp catalog, chuyển thành một history entry; không tự process khi chỉ áp dụng. Khi cấu hình đã khớp, người dùng có thể xử lý ảnh ngay tại đề xuất và kết quả được thêm vào timeline kèm nhãn “- Phiên bản N”. Nếu đã có phiên bản với đúng các bước đó thì khóa nút để tránh bản trùng.
 - Thay ảnh xóa proposal và kết quả request cũ, tránh đề xuất cho nhầm ảnh.
 
 ## 8. Responsive và accessibility

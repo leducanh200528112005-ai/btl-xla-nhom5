@@ -13,18 +13,27 @@ import {
   Plus,
   RefreshCcw,
   Upload,
+  Undo2,
 } from "lucide-react";
 import { useRef, useState, type DragEvent, type PointerEvent } from "react";
-import type { EditorState } from "./editor-state";
+import { getActiveVersion, versionLabel, type EditorState } from "./editor-state";
+import { apiClient } from "@/services/api-client";
+import { VersionHistory } from "./VersionHistory";
+import { ComparisonVersionPicker } from "./ComparisonVersionPicker";
+import { configsEqual, createDefaultConfig } from "./serialization";
 import type { ProcessResult } from "@/types/api";
 
-export type CanvasView = "original" | "compare" | "result";
+export type CanvasView = "single" | "compare";
 
 type CanvasProps = {
   state: EditorState;
   resultUrl: string | null;
   view: CanvasView;
   onViewChange: (view: CanvasView) => void;
+  onSelectVersion: (id: string | null) => void;
+  onCompareVersion: (side: "left" | "right", id: string | null) => void;
+  onSwapCompare: () => void;
+  onUndo: () => void;
   selectionError: string | null;
   uploadError: string | null;
   downloadError: string | null;
@@ -41,6 +50,10 @@ export function Canvas({
   resultUrl,
   view,
   onViewChange,
+  onSelectVersion,
+  onCompareVersion,
+  onSwapCompare,
+  onUndo,
   selectionError,
   uploadError,
   downloadError,
@@ -60,14 +73,20 @@ export function Canvas({
   }>({ key: "", comparePosition: 50, pan: { x: 0, y: 0 } });
   const stageRef = useRef<HTMLDivElement>(null);
   const dragOrigin = useRef<{ x: number; y: number; panX: number; panY: number } | null>(null);
-  const interactionKey = `${state.previewUrl ?? "empty"}:${view}`;
+  const interactionKey = `${state.previewUrl ?? "empty"}:${view}:${state.activeVersionId}`;
   const currentInteraction = interaction.key === interactionKey
     ? interaction
     : { key: interactionKey, comparePosition: 50, pan: { x: 0, y: 0 } };
   const comparePosition = currentInteraction.comparePosition;
   const pan = currentInteraction.pan;
   const hasImage = Boolean(state.previewUrl);
-  const canCompare = Boolean(state.result && resultUrl);
+  const canCompare = state.versions.length > 0;
+  const activeResult = getActiveVersion(state)?.result;
+  const draftChanged = !configsEqual(state.config, getActiveVersion(state)?.config ?? createDefaultConfig(state.catalog ?? []));
+  const imageFor = (id: string | null) => {
+    const version = state.versions.find((item) => item.result.result_id === id);
+    return version ? apiClient.imageUrl(version.result.url) : state.previewUrl!;
+  };
   const canPan = state.zoom > 1;
 
   function handleDragOver(event: DragEvent<HTMLDivElement>) {
@@ -113,6 +132,15 @@ export function Canvas({
     setIsPanning(false);
   }
 
+  function moveDivider(clientX: number) {
+    const bounds = stageRef.current?.getBoundingClientRect();
+    if (!bounds?.width) return;
+    setInteraction({
+      ...currentInteraction,
+      comparePosition: Math.max(0, Math.min(100, ((clientX - bounds.left) / bounds.width) * 100)),
+    });
+  }
+
   const imageTransform = `translate(${pan.x}px, ${pan.y}px) scale(${state.zoom})`;
 
   return (
@@ -125,8 +153,8 @@ export function Canvas({
           <div className="file-info-copy">
             <strong>{state.file?.name ?? "Chưa có ảnh"}</strong>
             <span>
-              {state.result && view !== "original"
-                ? `${state.result.width} × ${state.result.height} px · ${formatBytes(state.result.size_bytes)} · Kết quả`
+              {activeResult
+                ? `${activeResult.width} × ${activeResult.height} px · ${formatBytes(activeResult.size_bytes)} · ${versionLabel(state, state.activeVersionId)}`
                 : state.uploaded
                 ? `${state.uploaded.width} × ${state.uploaded.height} px · ${formatBytes(state.uploaded.size_bytes)}`
                 : state.file && state.previewWidth && state.previewHeight
@@ -135,35 +163,47 @@ export function Canvas({
             </span>
           </div>
         </div>
+        <div className="canvas-toolbar-actions">
         <div className="canvas-view-switch" role="group" aria-label="Chế độ xem ảnh">
           <button
             type="button"
-            className={view === "original" ? "view-button is-selected" : "view-button"}
-            onClick={() => onViewChange("original")}
+            className={view === "single" ? "view-button is-selected" : "view-button"}
+            onClick={() => onViewChange("single")}
             disabled={!hasImage}
           >
-            Gốc
+            Xem một ảnh
           </button>
           <button
             type="button"
             className={view === "compare" ? "view-button is-selected" : "view-button"}
             onClick={() => onViewChange("compare")}
             disabled={!canCompare}
-            title={canCompare ? "So sánh ảnh gốc và kết quả" : "Cần có kết quả thật để so sánh"}
+            title={canCompare ? "Chọn hai phiên bản để đối chiếu" : "Cần có kết quả thật để so sánh"}
           >
             <ArrowLeftRight size={14} /> So sánh
           </button>
-          <button
-            type="button"
-            className={view === "result" ? "view-button is-selected" : "view-button"}
-            onClick={() => onViewChange("result")}
-            disabled={!canCompare}
-            title={canCompare ? "Xem kết quả xử lý" : "Chưa có kết quả xử lý"}
-          >
-            Kết quả
-          </button>
+        </div>
+        <VersionHistory key={state.generation} state={state} onSelect={onSelectVersion} />
+        <button type="button" className="icon-button canvas-undo" onClick={onUndo}
+          disabled={state.historyIndex <= 0 || state.uploadStatus !== "uploaded" || state.processStatus === "loading" || state.adviseStatus === "loading"}
+          aria-label="Hoàn tác" title="Hoàn tác thay đổi cấu hình">
+          <Undo2 size={15} />
+        </button>
         </div>
       </div>
+
+      {hasImage && draftChanged && <p className="canvas-draft-note" role="status">
+        Đang chỉnh: {versionLabel(state, state.activeVersionId)} · Cấu hình đã thay đổi, chưa xử lý lại.
+      </p>}
+
+      {view === "compare" && canCompare && <div className="comparison-selectors">
+        {(["left", "right"] as const).map((side) => <ComparisonVersionPicker key={side}
+          state={state} side={side} onSelect={(id) => onCompareVersion(side, id)} />)}
+        <button type="button" className="secondary-button" onClick={onSwapCompare} aria-label="Đổi hai bên">
+          <ArrowLeftRight size={14} /> Đổi bên
+        </button>
+        <span>Chỉ đổi ảnh đối chiếu, không đổi cấu hình hoặc ngữ cảnh AI.</span>
+      </div>}
 
       {state.connectionStatus === "offline" && (
         <div className="canvas-notice connection-notice" role="status">
@@ -206,7 +246,7 @@ export function Canvas({
         {hasImage && state.previewUrl ? (
           <>
             <div className="image-viewport">
-              {view === "result" && resultUrl ? (
+              {view === "single" && resultUrl ? (
                 <img
                   className="canvas-image"
                   src={resultUrl}
@@ -214,12 +254,12 @@ export function Canvas({
                   draggable={false}
                   style={{ transform: imageTransform }}
                 />
-              ) : view === "compare" && resultUrl ? (
+               ) : view === "compare" && canCompare ? (
                 <>
                   <img
                     className="canvas-image"
-                    src={state.previewUrl}
-                    alt="Ảnh gốc"
+                    src={imageFor(state.compareLeftId)}
+                    alt={`Bên trái: ${versionLabel(state, state.compareLeftId)}`}
                     draggable={false}
                     style={{ transform: imageTransform }}
                   />
@@ -229,17 +269,39 @@ export function Canvas({
                   >
                     <img
                       className="canvas-image"
-                      src={resultUrl}
-                      alt="Kết quả xử lý"
+                      src={imageFor(state.compareRightId)}
+                      alt={`Bên phải: ${versionLabel(state, state.compareRightId)}`}
                       draggable={false}
                       style={{ transform: imageTransform }}
                     />
                   </div>
-                  <div className="compare-divider" style={{ left: `${comparePosition}%` }}>
+                  <div className="compare-divider" style={{ left: `${comparePosition}%` }}
+                    role="slider" tabIndex={0} aria-label="Thanh phân chia ảnh"
+                    aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(comparePosition)}
+                    onPointerDown={(event) => {
+                      event.stopPropagation();
+                      event.currentTarget.setPointerCapture(event.pointerId);
+                      moveDivider(event.clientX);
+                    }}
+                    onPointerMove={(event) => {
+                      if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+                        event.stopPropagation();
+                        moveDivider(event.clientX);
+                      }
+                    }}
+                    onKeyDown={(event) => {
+                      const delta = event.shiftKey ? 10 : 1;
+                      const next = event.key === "Home" ? 0 : event.key === "End" ? 100
+                        : event.key === "ArrowLeft" ? comparePosition - delta
+                        : event.key === "ArrowRight" ? comparePosition + delta : null;
+                      if (next === null) return;
+                      event.preventDefault();
+                      setInteraction({ ...currentInteraction, comparePosition: Math.max(0, Math.min(100, next)) });
+                    }}>
                     <span aria-hidden="true"><ArrowLeftRight size={13} /></span>
                   </div>
-                  <span className="compare-label compare-original">Ảnh gốc</span>
-                  <span className="compare-label compare-result">Kết quả</span>
+                  <span className="compare-label compare-original" aria-label="Phiên bản bên trái" aria-live="polite">{versionLabel(state, state.compareLeftId)}</span>
+                  <span className="compare-label compare-result" aria-label="Phiên bản bên phải" aria-live="polite">{versionLabel(state, state.compareRightId)}</span>
                 </>
               ) : (
                 <img
@@ -252,17 +314,17 @@ export function Canvas({
               )}
             </div>
 
-            <div className="image-status-pill" aria-live="polite">
+            {view !== "compare" && <div className="image-status-pill" aria-live="polite">
               {state.uploadStatus === "uploading" ? (
                 <><LoaderCircle className="spin" size={14} /> Đang tải ảnh lên…</>
               ) : state.uploadStatus === "error" ? (
                 <><span className="status-dot is-warning" /> Chưa tải lên backend</>
-              ) : view === "result" ? (
-                <><Check size={14} /> Kết quả thật</>
+              ) : activeResult ? (
+                <><Check size={14} /> {versionLabel(state, state.activeVersionId)}</>
               ) : (
                 <><span className="status-dot" /> Ảnh gốc</>
               )}
-            </div>
+            </div>}
 
             {state.uploadStatus === "error" && (
               <button type="button" className="retry-upload" onClick={onRetryUpload}>
@@ -301,33 +363,34 @@ export function Canvas({
       <div className="canvas-bottomline">
         <div className="canvas-caption">
           {hasImage ? (
-            <span>{view === "compare" ? "Kéo thanh trượt để so sánh" : view === "result" ? "Kết quả từ máy chủ" : "Bản xem trước không làm thay đổi ảnh gốc"}</span>
+            <span>{view === "compare" ? "Kéo thanh trượt để so sánh" : activeResult ? "Kết quả đã lưu · Chỉnh thông số rồi xử lý để tạo phiên bản mới" : "Bản xem trước không làm thay đổi ảnh gốc"}</span>
           ) : (
             <span>Không tải ảnh mẫu · Ảnh của bạn luôn được giữ nguyên</span>
           )}
         </div>
         {view === "compare" && canCompare && (
           <label className="compare-range-control">
-            <span className="visually-hidden">Điều chỉnh vùng so sánh ảnh gốc và kết quả</span>
+            <span className="visually-hidden">Điều chỉnh vùng so sánh trái phải</span>
             <input
               type="range"
-              min="5"
-              max="95"
+              min="0"
+              max="100"
               value={comparePosition}
               onChange={(event) => setInteraction({
                 ...currentInteraction,
                 comparePosition: Number(event.target.value),
               })}
-              aria-label="Điều chỉnh vùng so sánh ảnh gốc và kết quả"
+              aria-label="Điều chỉnh vùng so sánh trái phải"
             />
           </label>
         )}
-        {canCompare && (
-          <button type="button" className="download-inline" onClick={() => onDownload(state.result!)}>
+        {activeResult && (
+          <button type="button" className="download-inline" onClick={() => onDownload(activeResult)}>
             <Download size={14} /> Tải kết quả
           </button>
         )}
       </div>
+
 
       <div className="canvas-zoom-controls" role="group" aria-label="Điều khiển thu phóng">
         <button

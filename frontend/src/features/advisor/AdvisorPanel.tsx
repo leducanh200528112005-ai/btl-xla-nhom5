@@ -1,10 +1,10 @@
 "use client";
 
-import { Bot, Check, LoaderCircle, Send, Sparkles } from "lucide-react";
+import { ArrowUp, Bot, Check, LoaderCircle, Sparkles } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import type { AdviceResponse, ProcessingStep } from "@/types/api";
-import type { EditorState, ResultSnapshot } from "@/features/editor/editor-state";
-import { configMatchesProposal } from "@/features/editor/serialization";
+import { getActiveVersion, versionLabel, type EditorState, type ResultSnapshot } from "@/features/editor/editor-state";
+import { configMatchesProposal, configsEqual, createDefaultConfig } from "@/features/editor/serialization";
 import { apiClient } from "@/services/api-client";
 
 type AdvisorPanelProps = {
@@ -12,6 +12,7 @@ type AdvisorPanelProps = {
   busy: boolean;
   onAdvise: (prompt: string) => void;
   onApplyProposal: (proposal: AdviceResponse) => string | null;
+  onProcess: () => void;
 };
 
 function StepSummary({ steps, state }: { steps: ProcessingStep[]; state: EditorState }) {
@@ -27,7 +28,7 @@ function StepSummary({ steps, state }: { steps: ProcessingStep[]; state: EditorS
 function ResultMessage({ snapshot, state }: { snapshot: ResultSnapshot; state: EditorState }) {
   const [imageFailed, setImageFailed] = useState(false);
   return <div className="chat-result">
-    <strong>{snapshot.source === "ai" ? "Đã xử lý theo đề xuất AI" : "Bạn đã tự điều chỉnh và xử lý ảnh"}</strong>
+    <strong>{snapshot.source === "ai" ? "Đã xử lý theo đề xuất AI" : "Bạn đã tự điều chỉnh và xử lý ảnh"} - {versionLabel(state, snapshot.result.result_id)}</strong>
     <p>{snapshot.result.width} × {snapshot.result.height} px · Chạy từ ảnh gốc</p>
     {!imageFailed ? <a href={apiClient.imageUrl(snapshot.result.url)} target="_blank" rel="noreferrer">
       <img src={apiClient.imageUrl(snapshot.result.url)} alt={`Phiên bản đã xử lý ${snapshot.result.filename}`}
@@ -40,13 +41,34 @@ function ResultMessage({ snapshot, state }: { snapshot: ResultSnapshot; state: E
   </div>;
 }
 
-function ProposalMessage({ proposal, state, busy, onApplyProposal }: {
+function stepsMatchProposal(steps: ProcessingStep[], proposal: AdviceResponse): boolean {
+  if (steps.length !== proposal.steps.length) return false;
+  return proposal.steps.every((proposed, index) => {
+    const step = steps[index];
+    return step.algorithm === proposed.algorithm &&
+      Object.keys(step.params).length === Object.keys(proposed.params).length &&
+      Object.entries(step.params).every(([key, value]) => proposed.params[key] === value);
+  });
+}
+
+function ProposalMessage({ proposal, state, busy, onApplyProposal, onProcess, versionId }: {
   proposal: AdviceResponse; state: EditorState; busy: boolean;
+  versionId: string | null;
   onApplyProposal: AdvisorPanelProps["onApplyProposal"];
+  onProcess: AdvisorPanelProps["onProcess"];
 }) {
   const [applyError, setApplyError] = useState<string | null>(null);
   const matches = Boolean(state.catalog && configMatchesProposal(state.config, state.catalog, proposal));
   const canApply = state.connectionStatus === "ready" && Boolean(state.uploaded && state.catalog);
+  const sameVersion = versionId === state.activeVersionId;
+  const hasSteps = proposal.steps.length > 0;
+  const processing = state.processStatus === "loading";
+  const processedVersion = matches
+    ? state.versions.find((version) => stepsMatchProposal(version.steps, proposal)) ?? null
+    : null;
+  const matchedLabel = processedVersion
+    ? `Đã xử lý · ${versionLabel(state, processedVersion.result.result_id)}`
+    : hasSteps ? "Đã khớp đề xuất · Xử lý ảnh" : "Đã khớp đề xuất";
   return <div className="proposal-card">
     <div className="proposal-title"><Sparkles size={15} /><h3>Phân tích và đề xuất</h3></div>
     <p className="proposal-analysis">{proposal.analysis}</p>
@@ -62,22 +84,40 @@ function ProposalMessage({ proposal, state, busy, onApplyProposal }: {
     </ol> : <p className="proposal-no-steps">Không cần bật công cụ nào theo đề xuất này.</p>}
     {applyError && <p role="alert" className="advisor-error">{applyError}</p>}
     <button type="button" className={`primary-button apply-proposal${matches ? " is-matched" : ""}`}
-      disabled={matches || busy || !canApply}
-      onClick={() => setApplyError(onApplyProposal(proposal))}>
-      <Check size={14} /> {matches ? "Đã khớp đề xuất" : "Áp dụng cấu hình"}
+      disabled={matches ? (!canApply || busy || !hasSteps || Boolean(processedVersion)) : (busy || !canApply || !sameVersion)}
+      onClick={() => {
+        if (matches) { onProcess(); return; }
+        setApplyError(onApplyProposal(proposal));
+      }}>
+      {matches
+        ? processedVersion
+          ? <><Check size={14} /> {matchedLabel}</>
+          : processing
+            ? <><LoaderCircle className="spin" size={14} /> Đang xử lý ảnh…</>
+            : <><Check size={14} /> {matchedLabel}</>
+        : <><Check size={14} /> Áp dụng cấu hình</>}
     </button>
     <p className="proposal-match-status" role="status">
-      {matches ? "Cấu hình đang khớp đề xuất. Nhấn Xử lý ảnh để xem kết quả."
+      {matches
+        ? !hasSteps
+          ? "Đề xuất không cần bật công cụ nào nên không có gì để xử lý."
+          : processedVersion
+            ? `Cấu hình này đã tạo ${versionLabel(state, processedVersion.result.result_id)}. Chọn phiên bản đó để xem hoặc chỉnh tiếp.`
+            : processing ? "Đang gửi yêu cầu xử lý tới máy chủ…"
+            : "Cấu hình đang khớp đề xuất. Nhấn Xử lý ảnh để tạo phiên bản ngay tại đây."
+        : !sameVersion ? `Chọn ${versionLabel(state, versionId)} trong danh sách để áp dụng đề xuất này.`
         : "Áp dụng để thay cấu hình hiện tại. Ảnh chưa tự thay đổi."}
     </p>
   </div>;
 }
 
-export function AdvisorPanel({ state, busy, onAdvise, onApplyProposal }: AdvisorPanelProps) {
+export function AdvisorPanel({ state, busy, onAdvise, onApplyProposal, onProcess }: AdvisorPanelProps) {
   const [prompt, setPrompt] = useState("");
   const scrollArea = useRef<HTMLDivElement>(null);
   const hasUpload = state.connectionStatus === "ready" && Boolean(state.catalog?.length && state.uploaded);
   const canSubmit = hasUpload && prompt.trim().length > 0 && !busy;
+  const activeVersion = getActiveVersion(state);
+  const isDraftChanged = !configsEqual(state.config, activeVersion?.config ?? createDefaultConfig(state.catalog ?? []));
   useEffect(() => {
     if (scrollArea.current) scrollArea.current.scrollTop = scrollArea.current.scrollHeight;
   }, [state.chat, state.adviseStatus, state.activeTab]);
@@ -89,35 +129,30 @@ export function AdvisorPanel({ state, busy, onAdvise, onApplyProposal }: Advisor
   }
 
   return <div className="advisor-panel chat-panel">
-    <div className="sidebar-intro advisor-intro">
-      <div className="sidebar-title-row">
-        <span className="sidebar-heading-icon advisor-heading-icon"><Bot size={16} /></span>
-        <div><h2>AI tư vấn</h2><p>Cùng chỉnh ảnh qua từng lượt trao đổi</p></div>
-      </div>
-      <span className="small-status-label">HỘI THOẠI</span>
-    </div>
-
     <div className="advisor-scroll-area chat-timeline" ref={scrollArea} aria-label="Lịch sử chỉnh ảnh">
       {!state.chat.length && <div className="advisor-explainer">
         <div className="advisor-explainer-icon"><Bot size={18} /></div>
         <div><strong>Bắt đầu với mục tiêu của bạn</strong>
-          <p>AI xem ảnh gốc và kết quả gần nhất. Các lần bạn tự chỉnh và xử lý cũng được ghi nhận tại đây. Đổi ảnh sẽ bắt đầu hội thoại mới.</p>
+          <p>AI xem ảnh gốc, phiên bản đang chỉnh và cấu hình đang chọn. Hai ảnh đối chiếu không thay đổi ngữ cảnh AI. Đổi ảnh gốc sẽ bắt đầu hội thoại mới.</p>
         </div>
       </div>}
       {state.chat.map((entry) => <article key={entry.id} className={`chat-entry chat-entry-${entry.kind}`}>
         {entry.kind === "user" && <>
           <span className="chat-speaker">Bạn</span>
+          <small>Ngữ cảnh: {versionLabel(state, entry.versionId ?? null)}</small>
           <p className="chat-user-text">{entry.text}</p>
           {entry.status === "loading" && <p role="status"><LoaderCircle className="spin" size={14} /> AI đang phân tích…</p>}
           {entry.status === "error" && <div className="advisor-error">
             <p role="alert">{entry.error}</p>
-            <button type="button" className="secondary-button" disabled={!hasUpload || busy}
+            <button type="button" className="secondary-button" disabled={!hasUpload || busy || (entry.versionId ?? null) !== state.activeVersionId}
               onClick={() => onAdvise(entry.text)}>Thử gửi lại</button>
           </div>}
         </>}
         {entry.kind === "assistant" && <>
           <span className="chat-speaker">AI tư vấn</span>
-          <ProposalMessage proposal={entry.proposal} state={state} busy={busy} onApplyProposal={onApplyProposal} />
+          <small>Ngữ cảnh: {versionLabel(state, entry.versionId ?? null)}</small>
+          <ProposalMessage proposal={entry.proposal} state={state} busy={busy} onApplyProposal={onApplyProposal}
+            onProcess={onProcess} versionId={entry.versionId ?? null} />
         </>}
         {entry.kind === "applied" && <>
           <p className="chat-event-label"><Check size={14} /> Đã áp dụng đề xuất vào cấu hình · Chưa xử lý ảnh</p>
@@ -130,15 +165,12 @@ export function AdvisorPanel({ state, busy, onAdvise, onApplyProposal }: Advisor
       {state.processError && <p className="advisor-error" role="alert">Chưa tạo phiên bản mới: {state.processError.message}</p>}
     </div>
 
-    <div className="sidebar-actions advisor-actions chat-composer">
-      <p className="no-preview-note">
-        {state.latestResult ? "AI sẽ xem ảnh gốc, kết quả gần nhất và cấu hình đang chọn."
-          : "AI sẽ xem ảnh gốc và cấu hình đang chọn."}
-      </p>
-      <label className="advisor-prompt-label" htmlFor="advisor-prompt">Bạn muốn cải thiện điều gì?</label>
-      <textarea id="advisor-prompt" className="advisor-prompt" maxLength={2000} rows={3}
+    <div className="chat-composer">
+      <div className="chat-input-box">
+      <label className="visually-hidden" htmlFor="advisor-prompt">Bạn muốn cải thiện điều gì?</label>
+      <textarea id="advisor-prompt" className="advisor-prompt" maxLength={2000} rows={2}
         value={prompt} onChange={(event) => setPrompt(event.target.value)}
-        placeholder="Ví dụ: Da hơi bệt, giảm khử nhiễu và giữ nét tóc…"
+        placeholder={hasUpload ? "Bạn muốn cải thiện điều gì?" : "Tải ảnh lên để bắt đầu tư vấn…"}
         disabled={busy}
         onKeyDown={(event) => {
           if (event.key === "Enter" && (event.ctrlKey || event.metaKey)) {
@@ -146,13 +178,22 @@ export function AdvisorPanel({ state, busy, onAdvise, onApplyProposal }: Advisor
             submit();
           }
         }} />
-      <div className="prompt-footline"><span>Ctrl + Enter để gửi</span><span>{prompt.length} / 2.000</span></div>
-      {!hasUpload && <p className="advisor-requirement">Tải ảnh lên backend trước khi yêu cầu tư vấn.</p>}
-      <button type="button" className="primary-button advisor-submit" disabled={!canSubmit} onClick={submit}>
-        {state.adviseStatus === "loading" ? <LoaderCircle className="spin" size={15} /> : <Send size={14} />}
-        {state.adviseStatus === "loading" ? "Đang phân tích…" : "Gửi yêu cầu"}
+      <div className="chat-input-toolbar">
+        <span className="chat-input-context" role="status"
+          title={hasUpload
+            ? `Đang tư vấn cho: ${versionLabel(state, state.activeVersionId)}${isDraftChanged ? " · Cấu hình đã thay đổi, chưa xử lý lại. Ảnh đang xem chưa phản ánh thay đổi này." : ""}`
+            : "Tải ảnh lên backend trước khi yêu cầu tư vấn."}>
+          {versionLabel(state, state.activeVersionId)}{isDraftChanged && <span className="draft-context-mark" aria-label="Cấu hình chưa xử lý">*</span>}
+          <span className="visually-hidden">{isDraftChanged ? "Cấu hình đã thay đổi, chưa xử lý lại. Ảnh đang xem chưa phản ánh thay đổi này." : ""}</span>
+        </span>
+        {prompt.length > 0 && <span className="chat-input-counter">{prompt.length}/2000</span>}
+        <button type="button" className="primary-button advisor-submit" disabled={!canSubmit} onClick={submit}
+          aria-label={state.adviseStatus === "loading" ? "Đang phân tích…" : "Gửi yêu cầu"}
+          title="Gửi yêu cầu (Ctrl + Enter)">
+        {state.adviseStatus === "loading" ? <LoaderCircle className="spin" size={15} /> : <ArrowUp size={16} />}
       </button>
-      <p className="no-preview-note">Lịch sử trong phiên này · AI nhận tối đa 20 sự kiện gần nhất.</p>
+      </div>
+      </div>
     </div>
   </div>;
 }
